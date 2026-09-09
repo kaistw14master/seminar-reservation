@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatRange } from "@/lib/time";
 import { googleCalendarTemplateUrl } from "@/lib/calendar-link";
+import { labColor, labLabel, reservationLabel } from "@/lib/labs";
 import type { Reservation } from "@/lib/types";
 
 export default function MyReservations({ initial }: { initial: Reservation[] }) {
@@ -103,10 +104,10 @@ function Item({
     >
       <span
         className="h-9 w-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: reservation.room_color ?? "#2563eb" }}
+        style={{ backgroundColor: labColor(reservation.lab) }}
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{reservation.title}</p>
+        <p className="truncate text-sm font-medium">{reservationLabel(reservation)}</p>
         <p className="truncate text-xs text-muted">
           {reservation.room_name} · {formatRange(reservation.starts_at, reservation.ends_at)}
         </p>
@@ -116,8 +117,8 @@ function Item({
         <div className="flex items-center gap-2">
           <a
             href={googleCalendarTemplateUrl({
-              title: `[${reservation.room_name}] ${reservation.title}`,
-              details: reservation.purpose,
+              title: `[${reservation.room_name}] ${labLabel(reservation.lab)}`,
+              details: reservation.participants,
               startsAt: new Date(reservation.starts_at),
               endsAt: new Date(reservation.ends_at),
             })}

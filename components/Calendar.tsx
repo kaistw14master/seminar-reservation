@@ -21,6 +21,7 @@ import {
   weekDayKeys,
   weekStartKey,
 } from "@/lib/time";
+import { LABS, labColor, labLabel, reservationLabel } from "@/lib/labs";
 import type { Reservation, Room } from "@/lib/types";
 
 const SLOT_PX = 22;
@@ -259,6 +260,19 @@ export default function Calendar({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+        {LABS.map((lab) => (
+          <span key={lab.id} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: lab.color }} />
+            {lab.label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full border-2 border-white bg-black/20 dark:bg-white/30" />
+          흰 테두리는 내 예약
+        </span>
+      </div>
+
       {/* 세미나실이 하나뿐이면 선택 탭은 의미가 없으므로 숨긴다 */}
       <div className={`flex-wrap gap-1.5 ${rooms.length > 1 ? "flex" : "hidden"}`}>
         {rooms.map((item) => (
@@ -348,7 +362,6 @@ export default function Calendar({
                     dayKey={day}
                     isToday={day === todayKey}
                     reservations={byDay.get(day) ?? []}
-                    color={room.color}
                     currentEmail={currentEmail}
                     selection={selection?.dayKey === day ? selection : null}
                     onStartDrag={startDrag}
@@ -367,7 +380,6 @@ export default function Calendar({
           byDay={byDay}
           todayKey={todayKey}
           currentEmail={currentEmail}
-          fallbackColor={room.color}
           onOpenDetail={setDetail}
           onCreateAt={createAt}
           onOpenWeek={openWeekOf}
@@ -412,8 +424,8 @@ export default function Calendar({
               roomId: detail.room_id,
               startsAt: new Date(detail.starts_at),
               endsAt: new Date(detail.ends_at),
-              title: detail.title,
-              purpose: detail.purpose ?? "",
+              lab: detail.lab,
+              participants: detail.participants ?? "",
             });
             setDetail(null);
           }}
@@ -431,7 +443,6 @@ function DayColumn({
   dayKey,
   isToday,
   reservations,
-  color,
   currentEmail,
   selection,
   onStartDrag,
@@ -441,7 +452,6 @@ function DayColumn({
   dayKey: string;
   isToday: boolean;
   reservations: Reservation[];
-  color: string;
   currentEmail: string;
   selection: Selection | null;
   onStartDrag: (dayKey: string, slot: number) => void;
@@ -495,21 +505,21 @@ function DayColumn({
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onOpenDetail(reservation)}
-            title={`${reservation.title} · ${reservation.user_name ?? reservation.user_email}`}
+            title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
             className="absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white shadow-sm transition hover:brightness-110"
             style={{
               top: top + 1,
               height: height - 2,
-              backgroundColor: reservation.room_color ?? color,
+              backgroundColor: labColor(reservation.lab),
               outline: mine ? "2px solid rgba(255,255,255,0.75)" : undefined,
               outlineOffset: mine ? "-2px" : undefined,
             }}
           >
             <span className="block font-medium">
-              {timeLabel(startsAt)}
+              {timeLabel(startsAt)}–{timeLabel(endsAt)}
               {reservation.series_id ? <span className="ml-1 opacity-80">↻</span> : null}
             </span>
-            <span className="block truncate opacity-90">{reservation.title}</span>
+            <span className="block truncate opacity-90">{reservationLabel(reservation)}</span>
           </button>
         );
       })}

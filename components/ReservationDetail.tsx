@@ -4,6 +4,7 @@ import { useState } from "react";
 import Modal from "./Modal";
 import { formatRange } from "@/lib/time";
 import { googleCalendarTemplateUrl } from "@/lib/calendar-link";
+import { labColor, labLabel, reservationLabel } from "@/lib/labs";
 import type { Reservation } from "@/lib/types";
 
 type Props = {
@@ -55,8 +56,8 @@ export default function ReservationDetail({
   }
 
   const addToMyCalendar = googleCalendarTemplateUrl({
-    title: `[${reservation.room_name}] ${reservation.title}`,
-    details: reservation.purpose,
+    title: `[${reservation.room_name}] ${reservationLabel(reservation)}`,
+    details: null,
     startsAt: new Date(reservation.starts_at),
     endsAt: new Date(reservation.ends_at),
   });
@@ -64,14 +65,23 @@ export default function ReservationDetail({
   return (
     <Modal title="예약 상세" onClose={onClose}>
       <dl className="space-y-3 text-sm">
-        <Row label="제목" value={reservation.title} />
+        <div className="flex gap-3">
+          <dt className="w-16 shrink-0 text-muted">연구실</dt>
+          <dd className="flex min-w-0 flex-1 items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: labColor(reservation.lab) }}
+            />
+            {labLabel(reservation.lab)}
+          </dd>
+        </div>
         <Row label="세미나실" value={reservation.room_name ?? "-"} />
         <Row label="시간" value={formatRange(reservation.starts_at, reservation.ends_at)} />
         <Row
           label="예약자"
           value={`${reservation.user_name ?? ""} (${reservation.user_email})`.trim()}
         />
-        {reservation.purpose ? <Row label="목적" value={reservation.purpose} /> : null}
+        {reservation.participants ? <Row label="참가자" value={reservation.participants} /> : null}
         {isSeries ? (
           <Row label="반복" value="반복 예약의 한 회차입니다." />
         ) : null}

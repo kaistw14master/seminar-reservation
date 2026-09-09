@@ -5,6 +5,7 @@ import {
   getReservation,
   updateReservation,
 } from "@/lib/reservations";
+import { isLabId } from "@/lib/labs";
 import { errorResponse, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +31,13 @@ export async function PATCH(request: Request, { params }: Context) {
     await loadOwned(id);
 
     const body = await request.json();
+    if (body.lab !== undefined && !isLabId(body.lab)) {
+      throw new ValidationError("연구실을 선택해 주세요.");
+    }
     const reservation = await updateReservation(id, {
-      title: body.title !== undefined ? String(body.title).trim() : undefined,
-      purpose: body.purpose !== undefined ? (String(body.purpose).trim() || null) : undefined,
+      lab: body.lab !== undefined ? String(body.lab) : undefined,
+      participants:
+        body.participants !== undefined ? String(body.participants).trim() || null : undefined,
       startsAt: body.startsAt !== undefined ? new Date(body.startsAt) : undefined,
       endsAt: body.endsAt !== undefined ? new Date(body.endsAt) : undefined,
     });

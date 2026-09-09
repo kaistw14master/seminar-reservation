@@ -11,6 +11,7 @@ import {
   expandOccurrences,
   type RecurrenceRule,
 } from "@/lib/recurrence";
+import { DEFAULT_LAB, LABS } from "@/lib/labs";
 import type { Reservation, Room } from "@/lib/types";
 
 export type DialogSeed = {
@@ -19,8 +20,8 @@ export type DialogSeed = {
   roomId: number;
   startsAt: Date;
   endsAt: Date;
-  title?: string;
-  purpose?: string;
+  lab?: string;
+  participants?: string;
 };
 
 type Conflict = { startsAt: string; endsAt: string; conflictWith: string };
@@ -49,8 +50,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
   const [roomId, setRoomId] = useState(seed.roomId);
   const [start, setStart] = useState(toLocalInput(seed.startsAt));
   const [end, setEnd] = useState(toLocalInput(seed.endsAt));
-  const [title, setTitle] = useState(seed.title ?? "");
-  const [purpose, setPurpose] = useState(seed.purpose ?? "");
+  const [lab, setLab] = useState<string>(seed.lab ?? DEFAULT_LAB);
+  const [participants, setParticipants] = useState(seed.participants ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
@@ -105,8 +106,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
 
     const payload: Record<string, unknown> = {
       roomId,
-      title: title.trim(),
-      purpose: purpose.trim(),
+      lab,
+      participants: participants.trim(),
       startsAt: fromLocalInput(start).toISOString(),
       endsAt: fromLocalInput(end).toISOString(),
     };
@@ -286,27 +287,43 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
         </p>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">제목</label>
-          <input
-            type="text"
-            required
-            maxLength={120}
-            placeholder="예: 연구실 주간 미팅"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className={inputClass}
-          />
+          <label className="mb-1 block text-sm font-medium">연구실</label>
+          <div className="flex gap-2">
+            {LABS.map((option) => {
+              const active = lab === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setLab(option.id)}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                    active
+                      ? "border-transparent font-medium text-white"
+                      : "border-line text-muted hover:bg-black/5 dark:hover:bg-white/10"
+                  }`}
+                  style={active ? { backgroundColor: option.color } : undefined}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: active ? "rgba(255,255,255,0.9)" : option.color }}
+                  />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium">
-            목적 <span className="font-normal text-muted">(선택)</span>
+            참가자 <span className="font-normal text-muted">(선택)</span>
           </label>
-          <textarea
-            rows={2}
-            maxLength={500}
-            value={purpose}
-            onChange={(event) => setPurpose(event.target.value)}
+          <input
+            type="text"
+            maxLength={300}
+            placeholder="예: 김OO, 이OO 외 3명"
+            value={participants}
+            onChange={(event) => setParticipants(event.target.value)}
             className={inputClass}
           />
         </div>

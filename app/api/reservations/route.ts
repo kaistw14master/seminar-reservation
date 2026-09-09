@@ -7,6 +7,7 @@ import {
   validateTimes,
 } from "@/lib/reservations";
 import { RecurrenceError, expandOccurrences, normalizeRule } from "@/lib/recurrence";
+import { isLabId } from "@/lib/labs";
 import { errorResponse, requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -50,17 +51,18 @@ export async function POST(request: Request) {
     const roomId = Number(body.roomId);
     if (!Number.isInteger(roomId)) throw new ValidationError("세미나실을 선택해 주세요.");
 
-    const title = String(body.title ?? "").trim();
-    if (!title) throw new ValidationError("예약 제목을 입력해 주세요.");
-    if (title.length > 120) throw new ValidationError("제목은 120자 이내로 입력해 주세요.");
+    const lab = String(body.lab ?? "");
+    if (!isLabId(lab)) throw new ValidationError("연구실을 선택해 주세요.");
 
-    const purpose = body.purpose ? String(body.purpose).trim().slice(0, 500) : null;
+    const participants = body.participants
+      ? String(body.participants).trim().slice(0, 300) || null
+      : null;
 
     const startsAt = new Date(body.startsAt);
     const endsAt = new Date(body.endsAt);
     validateTimes(startsAt, endsAt);
 
-    const common = { roomId, title, purpose, userEmail: user.email, userName: user.name };
+    const common = { roomId, lab, participants, userEmail: user.email, userName: user.name };
 
     // 반복 예약: 회차를 모두 펼쳐서 한 트랜잭션에 넣는다
     if (body.recurrence) {

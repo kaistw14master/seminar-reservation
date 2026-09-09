@@ -1,6 +1,7 @@
 "use client";
 
 import { DAY_LABELS, dayStart, partsInZone, timeLabel } from "@/lib/time";
+import { labColor, reservationLabel } from "@/lib/labs";
 import type { Reservation } from "@/lib/types";
 
 const MAX_CHIPS = 3;
@@ -11,7 +12,6 @@ type Props = {
   byDay: Map<string, Reservation[]>;
   todayKey: string;
   currentEmail: string;
-  fallbackColor: string;
   onOpenDetail: (reservation: Reservation) => void;
   onCreateAt: (dayKey: string) => void;
   onOpenWeek: (dayKey: string) => void;
@@ -23,7 +23,6 @@ export default function MonthGrid({
   byDay,
   todayKey,
   currentEmail,
-  fallbackColor,
   onOpenDetail,
   onCreateAt,
   onOpenWeek,
@@ -90,19 +89,20 @@ export default function MonthGrid({
                         key={reservation.id}
                         type="button"
                         onClick={() => onOpenDetail(reservation)}
-                        title={`${reservation.title} · ${reservation.user_name ?? reservation.user_email}`}
+                        title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
                         className="flex w-full items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110"
                         style={{
-                          backgroundColor: reservation.room_color ?? fallbackColor,
+                          backgroundColor: labColor(reservation.lab),
                           outline: mine ? "1.5px solid rgba(255,255,255,0.8)" : undefined,
                           outlineOffset: mine ? "-1.5px" : undefined,
                         }}
                       >
                         <span className="shrink-0 font-medium">
-                          {timeLabel(new Date(reservation.starts_at))}
+                          {timeLabel(new Date(reservation.starts_at))}–
+                          {timeLabel(new Date(reservation.ends_at))}
                         </span>
                         {reservation.series_id ? <span className="shrink-0 opacity-80">↻</span> : null}
-                        <span className="truncate opacity-90">{reservation.title}</span>
+                        <span className="truncate opacity-90">{reservationLabel(reservation)}</span>
                       </button>
                     );
                   })}

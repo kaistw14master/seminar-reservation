@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS reservations (
   id              SERIAL PRIMARY KEY,
   room_id         INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-  title           TEXT NOT NULL,
-  purpose         TEXT,
+  lab             TEXT NOT NULL,
+  participants    TEXT,
   starts_at       TIMESTAMPTZ NOT NULL,
   ends_at         TIMESTAMPTZ NOT NULL,
   user_email      TEXT NOT NULL,
@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS reservations (
   CONSTRAINT reservations_status_check CHECK (status IN ('confirmed', 'cancelled')),
   CONSTRAINT reservations_time_check CHECK (ends_at > starts_at)
 );
+
+-- 제목/목적 대신 연구실 + 참가자를 받도록 바꾼 뒤의 마이그레이션 (기존 DB 용)
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS lab TEXT;
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS participants TEXT;
+UPDATE reservations SET lab = 'SBML' WHERE lab IS NULL;
+ALTER TABLE reservations ALTER COLUMN lab SET NOT NULL;
+ALTER TABLE reservations DROP COLUMN IF EXISTS title;
+ALTER TABLE reservations DROP COLUMN IF EXISTS purpose;
 
 -- 반복 예약은 회차마다 개별 행으로 저장하고 series_id 로 묶는다.
 -- (규칙만 저장하면 아래 EXCLUDE 제약으로 중복을 막을 수 없다)

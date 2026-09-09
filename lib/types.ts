@@ -15,8 +15,8 @@ export type Reservation = {
   room_id: number;
   room_name?: string;
   room_color?: string;
-  title: string;
-  purpose: string | null;
+  lab: string;
+  participants: string | null;
   starts_at: string; // ISO
   ends_at: string; // ISO
   user_email: string;

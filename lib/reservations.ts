@@ -8,6 +8,7 @@ import {
   SLOT_MINUTES,
 } from "./config";
 import { dateKey, minutesBetween, partsInZone } from "./time";
+import { reservationLabel } from "./labs";
 import type { Occurrence } from "./recurrence";
 import type { Reservation } from "./types";
 
@@ -24,7 +25,7 @@ export class ValidationError extends Error {
 
 // 지연 평가: 빌드 타임에 DB 커넥션이 만들어지지 않도록 함수로 감싼다
 const reservationColumns = () => sql`
-  r.id, r.room_id, r.title, r.purpose, r.starts_at, r.ends_at,
+  r.id, r.room_id, r.lab, r.participants, r.starts_at, r.ends_at,
   r.user_email, r.user_name, r.status, r.series_id,
   r.created_at,
   rm.name AS room_name, rm.color AS room_color
@@ -114,8 +115,8 @@ export async function getReservation(id: number): Promise<Reservation | null> {
 
 type CreateInput = {
   roomId: number;
-  title: string;
-  purpose: string | null;
+  lab: string;
+  participants: string | null;
   startsAt: Date;
   endsAt: Date;
   userEmail: string;
@@ -150,9 +151,9 @@ export async function createReservation(input: CreateInput): Promise<Reservation
 
     const [row] = await tx<{ id: number }[]>`
       INSERT INTO reservations
-        (room_id, title, purpose, starts_at, ends_at, user_email, user_name)
+        (room_id, lab, participants, starts_at, ends_at, user_email, user_name)
       VALUES (
-        ${input.roomId}, ${input.title}, ${input.purpose},
+        ${input.roomId}, ${input.lab}, ${input.participants},
         ${input.startsAt}, ${input.endsAt},
         ${input.userEmail}, ${input.userName}
       )
@@ -167,7 +168,7 @@ export async function createReservation(input: CreateInput): Promise<Reservation
 export type SeriesConflict = {
   startsAt: string;
   endsAt: string;
-  /** 그 시간을 이미 차지하고 있는 예약의 제목 */
+  /** 그 시간을 이미 차지하고 있는 예약 (연구실 · 참가자) */
   conflictWith: string;
 };
 
@@ -216,8 +217,8 @@ export async function createReservationSeries(
 
     for (const occurrence of input.occurrences) {
       // 같은 트랜잭션에서 방금 넣은 회차도 함께 검사된다
-      const [conflict] = await tx<{ title: string }[]>`
-        SELECT title FROM reservations
+      const [conflict] = await tx<{ lab: string; participants: string | null }[]>`
+        SELECT lab, participants FROM reservations
         WHERE room_id = ${input.roomId}
           AND status = 'confirmed'
           AND starts_at < ${occurrence.endsAt}
@@ -229,16 +230,16 @@ export async function createReservationSeries(
         conflicts.push({
           startsAt: occurrence.startsAt.toISOString(),
           endsAt: occurrence.endsAt.toISOString(),
-          conflictWith: conflict.title,
+          conflictWith: reservationLabel(conflict),
         });
         continue;
       }
 
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO reservations
-          (room_id, title, purpose, starts_at, ends_at, user_email, user_name, series_id)
+          (room_id, lab, participants, starts_at, ends_at, user_email, user_name, series_id)
         VALUES (
-          ${input.roomId}, ${input.title}, ${input.purpose},
+          ${input.roomId}, ${input.lab}, ${input.participants},
           ${occurrence.startsAt}, ${occurrence.endsAt},
           ${input.userEmail}, ${input.userName}, ${seriesId}
         )
@@ -272,8 +273,8 @@ export async function createReservationSeries(
 }
 
 type UpdateInput = {
-  title?: string;
-  purpose?: string | null;
+  lab?: string;
+  participants?: string | null;
   startsAt?: Date;
   endsAt?: Date;
 };
@@ -307,8 +308,8 @@ export async function updateReservation(
 
     await tx`
       UPDATE reservations SET
-        title      = ${input.title ?? existing.title},
-        purpose    = ${input.purpose === undefined ? existing.purpose : input.purpose},
+        lab          = ${input.lab ?? existing.lab},
+        participants = ${input.participants === undefined ? existing.participants : input.participants},
         starts_at  = ${startsAt},
         ends_at    = ${endsAt},
         updated_at = now()
