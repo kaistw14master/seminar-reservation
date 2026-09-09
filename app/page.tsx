@@ -1,13 +1,15 @@
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import Calendar from "@/components/Calendar";
-import { monthKeyOf, weekStartKey } from "@/lib/time";
+import { addMinutes, dayStart, monthKeyOf, weekDayKeys, weekStartKey } from "@/lib/time";
+import { listReservations } from "@/lib/reservations";
 import type { Room } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await auth();
+  const initialWeek = weekStartKey(new Date());
 
   const rooms = await sql<Room[]>`
     SELECT id, name, location, capacity, color, active, sort_order
@@ -28,13 +30,22 @@ export default async function HomePage() {
     );
   }
 
+  // 첫 화면에 필요한 예약을 서버에서 함께 내려보내 브라우저의 추가 요청을 없앤다
+  const days = weekDayKeys(initialWeek);
+  const initialReservations = await listReservations({
+    from: dayStart(days[0]),
+    to: addMinutes(dayStart(days[6]), 24 * 60),
+    roomId: rooms[0].id,
+  });
+
   return (
     <Calendar
       rooms={rooms}
       currentEmail={session?.user?.email ?? ""}
       isAdmin={Boolean(session?.user?.isAdmin)}
-      initialWeek={weekStartKey(new Date())}
+      initialWeek={initialWeek}
       initialMonth={monthKeyOf(new Date())}
+      initialReservations={initialReservations}
     />
   );
 }

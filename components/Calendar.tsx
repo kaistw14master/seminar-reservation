@@ -40,6 +40,7 @@ type Props = {
   isAdmin: boolean;
   initialWeek: string;
   initialMonth: string;
+  initialReservations: Reservation[];
 };
 
 /** dayKey + 슬롯 인덱스 -> 실제 시각 */
@@ -53,13 +54,14 @@ export default function Calendar({
   isAdmin,
   initialWeek,
   initialMonth,
+  initialReservations,
 }: Props) {
   const [view, setView] = useState<View>("week");
   const [weekKey, setWeekKey] = useState(initialWeek);
   const [monthKey, setMonthKey] = useState(initialMonth);
   const [roomId, setRoomId] = useState(rooms[0].id);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
+  const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -115,7 +117,13 @@ export default function Calendar({
     }
   }, [days, roomId]);
 
+  // 첫 렌더는 서버가 내려준 데이터를 그대로 쓰고, 주/월/방이 바뀔 때부터 다시 불러온다
+  const skipFirstLoad = useRef(true);
   useEffect(() => {
+    if (skipFirstLoad.current) {
+      skipFirstLoad.current = false;
+      return;
+    }
     void load();
   }, [load]);
 
