@@ -1,5 +1,7 @@
 # 세미나실 예약 시스템
 
+운영 주소: https://kaist-w14-reservation.vercel.app
+
 Next.js(App Router) + Vercel Postgres + Google 로그인으로 만든 세미나실 예약 시스템입니다.
 
 - 주간/월간 캘린더 보기, 주간에서는 **드래그로 시간 선택 → 바로 예약**
