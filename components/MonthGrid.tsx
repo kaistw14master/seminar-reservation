@@ -2,6 +2,7 @@
 
 import { DAY_LABELS, dayStart, partsInZone, timeLabel } from "@/lib/time";
 import { labColor, reservationLabel } from "@/lib/labs";
+import { weekendTone } from "@/lib/weekend";
 import type { Reservation } from "@/lib/types";
 
 const MAX_CHIPS = 3;
@@ -41,8 +42,8 @@ export default function MonthGrid({
             return (
               <div
                 key={day}
-                className={`px-2 py-2 text-center text-xs ${
-                  weekday === 0 ? "text-red-500" : weekday === 6 ? "text-blue-500" : "text-muted"
+                className={`px-2 py-2 text-center text-xs font-medium ${
+                  weekendTone(weekday) || "text-muted"
                 }`}
               >
                 {DAY_LABELS[weekday]}
@@ -85,8 +86,8 @@ export default function MonthGrid({
                     isToday
                       ? "bg-blue-600 font-semibold text-white hover:bg-blue-700"
                       : inMonth
-                        ? "text-ink"
-                        : "text-muted"
+                        ? weekendTone(parts.weekday) || "text-ink"
+                        : "text-muted opacity-60"
                   }`}
                 >
                   {parts.day}

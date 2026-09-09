@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import Calendar from "@/components/Calendar";
-import { addMinutes, dayStart, monthKeyOf, weekDayKeys, weekStartKey } from "@/lib/time";
+import { addMinutes, dateKey, dayStart, monthKeyOf, weekDayKeys, weekStartKey } from "@/lib/time";
 import { listReservations } from "@/lib/reservations";
 import type { Room } from "@/lib/types";
 
@@ -46,6 +46,7 @@ export default async function HomePage() {
       initialWeek={initialWeek}
       initialMonth={monthKeyOf(new Date())}
       initialReservations={initialReservations}
+      initialToday={dateKey(new Date())}
     />
   );
 }

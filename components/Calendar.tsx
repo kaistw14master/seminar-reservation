@@ -23,6 +23,7 @@ import {
 } from "@/lib/time";
 import { LABS, labColor, labLabel, reservationLabel } from "@/lib/labs";
 import { useIsNarrow } from "@/lib/use-media";
+import { weekendTone } from "@/lib/weekend";
 import type { Reservation, Room } from "@/lib/types";
 
 const SLOT_PX = 22;
@@ -42,6 +43,7 @@ type Props = {
   initialWeek: string;
   initialMonth: string;
   initialReservations: Reservation[];
+  initialToday: string;
 };
 
 /** dayKey + 슬롯 인덱스 -> 실제 시각 */
@@ -56,6 +58,7 @@ export default function Calendar({
   initialWeek,
   initialMonth,
   initialReservations,
+  initialToday,
 }: Props) {
   const [view, setView] = useState<View>("week");
   const [weekKey, setWeekKey] = useState(initialWeek);
@@ -72,7 +75,7 @@ export default function Calendar({
   const [nowMs, setNowMs] = useState(0);
   // 좁은 화면에서는 주간 대신 하루씩 본다
   const isNarrow = useIsNarrow();
-  const [selectedDay, setSelectedDay] = useState(initialWeek);
+  const [selectedDay, setSelectedDay] = useState(initialToday);
   const [notice, setNotice] = useState<string | null>(null);
 
   const dragging = useRef(false);
@@ -194,6 +197,18 @@ export default function Calendar({
   /** 월간 보기에서 날짜를 눌렀을 때 쓸 기본 시간대 */
   function createAt(day: string) {
     const startsAt = day === todayKey ? nextRoundedSlot() : slotTime(day, (9 * 60) / SLOT_MINUTES);
+    setDialogSeed({
+      mode: "create",
+      roomId,
+      startsAt,
+      endsAt: addMinutes(startsAt, DEFAULT_DURATION_SLOTS * SLOT_MINUTES),
+    });
+  }
+
+  /** 터치에서는 드래그 대신 탭으로 만든다 (스크롤과 구분하기 위해 click 이벤트를 쓴다) */
+  function tapSlot(dayKey: string, slot: number) {
+    const startsAt = slotTime(dayKey, slot);
+    if (startsAt <= new Date()) return;
     setDialogSeed({
       mode: "create",
       roomId,
@@ -361,8 +376,12 @@ export default function Calendar({
                         : "border-line text-muted"
                   }`}
                 >
-                  <span>{DAY_LABELS[parts.weekday]}</span>
-                  <span className="font-medium">{parts.day}</span>
+                  <span className={active ? "" : weekendTone(parts.weekday)}>
+                    {DAY_LABELS[parts.weekday]}
+                  </span>
+                  <span className={`font-medium ${active ? "" : weekendTone(parts.weekday)}`}>
+                    {parts.day}
+                  </span>
                 </button>
               );
             })}
@@ -386,8 +405,14 @@ export default function Calendar({
                         isToday ? "bg-blue-50 dark:bg-blue-950/40" : ""
                       }`}
                     >
-                      <div className="text-xs text-muted">{DAY_LABELS[parts.weekday]}</div>
-                      <div className={`text-sm ${isToday ? "font-semibold text-blue-600" : ""}`}>
+                      <div className={`text-xs ${weekendTone(parts.weekday) || "text-muted"}`}>
+                        {DAY_LABELS[parts.weekday]}
+                      </div>
+                      <div
+                        className={`text-sm ${
+                          isToday ? "font-semibold text-blue-600" : weekendTone(parts.weekday)
+                        }`}
+                      >
                         {parts.month}/{parts.day}
                       </div>
                     </div>
@@ -423,6 +448,7 @@ export default function Calendar({
                     selection={selection?.dayKey === day ? selection : null}
                     onStartDrag={startDrag}
                     onExtendDrag={extendDrag}
+                    onTapSlot={tapSlot}
                     onOpenDetail={setDetail}
                   />
                 ))}
@@ -508,6 +534,7 @@ function DayColumn({
   selection,
   onStartDrag,
   onExtendDrag,
+  onTapSlot,
   onOpenDetail,
 }: {
   dayKey: string;
@@ -518,9 +545,12 @@ function DayColumn({
   selection: Selection | null;
   onStartDrag: (dayKey: string, slot: number) => void;
   onExtendDrag: (dayKey: string, slot: number) => void;
+  onTapSlot: (dayKey: string, slot: number) => void;
   onOpenDetail: (reservation: Reservation) => void;
 }) {
   const open = dayStart(dayKey);
+  // 마우스면 드래그, 터치면 탭. click 은 스크롤 제스처 뒤에는 발생하지 않아 오작동이 없다.
+  const pointerKind = useRef("mouse");
 
   return (
     <div
@@ -536,8 +566,14 @@ function DayColumn({
         return (
           <div
             key={slot}
-            onPointerDown={past ? undefined : () => onStartDrag(dayKey, slot)}
+            onPointerDown={(event) => {
+              pointerKind.current = event.pointerType || "mouse";
+              if (!past && pointerKind.current === "mouse") onStartDrag(dayKey, slot);
+            }}
             onPointerEnter={past ? undefined : () => onExtendDrag(dayKey, slot)}
+            onClick={() => {
+              if (!past && pointerKind.current !== "mouse") onTapSlot(dayKey, slot);
+            }}
             title={past ? "이미 지난 시간은 예약할 수 없습니다" : undefined}
             className={`absolute inset-x-0 transition-colors ${
               past ? "slot-past" : "cursor-pointer hover:bg-blue-500/10"
