@@ -104,7 +104,9 @@ export default function MonthGrid({
                           new Date(reservation.ends_at),
                         )} ${reservationLabel(reservation)}`}
                         aria-label={reservationLabel(reservation)}
-                        className="h-2 w-2 rounded-full"
+                        className={`h-2 w-2 rounded-full ${
+                          reservation.user_email === currentEmail ? "mine-dot" : ""
+                        }`}
                         style={{ backgroundColor: labColor(reservation.lab) }}
                       />
                     ))}
@@ -119,12 +121,10 @@ export default function MonthGrid({
                         type="button"
                         onClick={() => onOpenDetail(reservation)}
                         title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
-                        className="flex w-full items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110"
-                        style={{
-                          backgroundColor: labColor(reservation.lab),
-                          outline: mine ? "1.5px solid rgba(255,255,255,0.8)" : undefined,
-                          outlineOffset: mine ? "-1.5px" : undefined,
-                        }}
+                        className={`flex w-full items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
+                          mine ? "mine" : ""
+                        }`}
+                        style={{ backgroundColor: labColor(reservation.lab) }}
                       >
                         <span className="shrink-0 font-medium">
                           {timeLabel(new Date(reservation.starts_at))}–

@@ -313,8 +313,8 @@ export default function Calendar({
           </span>
         ))}
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full border-2 border-white bg-black/20 dark:bg-white/30" />
-          흰 테두리는 내 예약
+          <span className="mine-dot h-2.5 w-2.5 rounded-full bg-muted" />
+          테두리 표시는 내 예약
         </span>
       </div>
 
@@ -628,13 +628,13 @@ function DayColumn({
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onOpenDetail(reservation)}
             title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
-            className="absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white shadow-sm transition hover:brightness-110"
+            className={`absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
+              mine ? "mine" : "shadow-sm"
+            }`}
             style={{
               top: top + 1,
               height: height - 2,
               backgroundColor: labColor(reservation.lab),
-              outline: mine ? "2px solid rgba(255,255,255,0.75)" : undefined,
-              outlineOffset: mine ? "-2px" : undefined,
             }}
           >
             <span className="block font-medium">
