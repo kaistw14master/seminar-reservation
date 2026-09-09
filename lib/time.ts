@@ -88,10 +88,13 @@ export function dateKeyOfDayStart(key: string, offsetDays: number): string {
   return dateKey(new Date(dayStart(key).getTime() + offsetDays * DAY + 12 * 60 * MINUTE));
 }
 
-/** 해당 날짜가 속한 주의 월요일 날짜키 */
-export function weekStartKey(date: Date): string {
+/**
+ * 해당 날짜가 속한 주의 시작 날짜키.
+ * startsOn: 1=월요일 시작(주간 보기), 0=일요일 시작(월간 달력)
+ */
+export function weekStartKey(date: Date, startsOn: 0 | 1 = 1): string {
   const p = partsInZone(date);
-  const delta = p.weekday === 0 ? -6 : 1 - p.weekday;
+  const delta = startsOn === 1 ? (p.weekday === 0 ? -6 : 1 - p.weekday) : -p.weekday;
   return dateKeyOfDayStart(dateKey(date), delta);
 }
 
@@ -112,12 +115,12 @@ export function shiftMonth(key: string, delta: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
-/** 월 달력에 표시할 날짜키 목록 (앞뒤 주를 채워 항상 월요일~일요일로 떨어진다) */
+/** 월 달력에 표시할 날짜키 목록 (앞뒤 주를 채워 항상 일요일~토요일로 떨어진다) */
 export function monthGridKeys(key: string): string[] {
   const firstOfMonth = `${key}-01`;
-  const start = weekStartKey(dayStart(firstOfMonth));
+  const start = weekStartKey(dayStart(firstOfMonth), 0);
   const lastOfMonth = dateKeyOfDayStart(`${shiftMonth(key, 1)}-01`, -1);
-  const end = dateKeyOfDayStart(weekStartKey(dayStart(lastOfMonth)), 6);
+  const end = dateKeyOfDayStart(weekStartKey(dayStart(lastOfMonth), 0), 6);
 
   const keys: string[] = [];
   for (let cursor = start; cursor <= end; cursor = dateKeyOfDayStart(cursor, 1)) {
