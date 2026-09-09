@@ -76,6 +76,13 @@ body {
 .cell-sat {
   background-color: rgba(59, 130, 246, 0.07);
 }
+/* 주간 보기용: 세로로 길게 칠해지므로 더 연하게 */
+.cell-sun-soft {
+  background-color: rgba(239, 68, 68, 0.035);
+}
+.cell-sat-soft {
+  background-color: rgba(59, 130, 246, 0.035);
+}
 .cell-today {
   background-color: rgba(37, 99, 235, 0.12);
 }
@@ -86,6 +93,12 @@ body {
   }
   .cell-sat {
     background-color: rgba(96, 165, 250, 0.1);
+  }
+  .cell-sun-soft {
+    background-color: rgba(248, 113, 113, 0.05);
+  }
+  .cell-sat-soft {
+    background-color: rgba(96, 165, 250, 0.05);
   }
   .cell-today {
     background-color: rgba(59, 130, 246, 0.18);

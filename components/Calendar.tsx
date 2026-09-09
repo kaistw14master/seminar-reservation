@@ -402,7 +402,7 @@ export default function Calendar({
                     <div
                       key={day}
                       className={`border-l border-line px-2 py-2 text-center ${
-                        isToday ? "cell-today" : weekendCell(parts.weekday)
+                        isToday ? "cell-today" : weekendCell(parts.weekday, "soft")
                       }`}
                     >
                       <div className={`text-xs ${weekendTone(parts.weekday) || "text-muted"}`}>
@@ -556,7 +556,7 @@ function DayColumn({
   return (
     <div
       className={`relative border-l border-line ${
-        isToday ? "cell-today" : weekendCell(weekday)
+        isToday ? "cell-today" : weekendCell(weekday, "soft")
       }`}
       style={{ height: GRID_HEIGHT }}
     >
