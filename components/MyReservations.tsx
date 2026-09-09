@@ -15,7 +15,7 @@ export default function MyReservations({ initial }: { initial: Reservation[] }) 
   const past = reservations.filter((r) => new Date(r.ends_at).getTime() < now);
 
   async function cancel(id: number) {
-    if (!window.confirm("이 예약을 취소할까요? 연동된 구글 캘린더 일정도 함께 삭제됩니다.")) return;
+    if (!window.confirm("이 예약을 취소할까요?")) return;
     setBusyId(id);
     setError(null);
     try {

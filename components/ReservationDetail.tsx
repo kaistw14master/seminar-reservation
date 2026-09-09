@@ -31,8 +31,8 @@ export default function ReservationDetail({
   async function cancel(scope: "single" | "following") {
     const message =
       scope === "following"
-        ? "이 회차와 이후의 모든 회차를 취소할까요? 연동된 구글 캘린더 일정도 함께 삭제됩니다."
-        : "이 예약을 취소할까요? 연동된 구글 캘린더 일정도 함께 삭제됩니다.";
+        ? "이 회차와 이후의 모든 회차를 취소할까요?"
+        : "이 예약을 취소할까요?";
     if (!window.confirm(message)) return;
 
     setWorking(true);
@@ -77,11 +77,6 @@ export default function ReservationDetail({
         ) : null}
       </dl>
 
-      {reservation.sync_error ? (
-        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          구글 캘린더 동기화에 실패했습니다. 예약 자체는 정상 등록되어 있습니다.
-        </p>
-      ) : null}
 
       {error ? (
         <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

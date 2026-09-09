@@ -23,11 +23,10 @@ export async function PATCH(request: Request, { params }: Context) {
         location    = ${body.location !== undefined ? (body.location || null) : existing.location},
         capacity    = ${body.capacity !== undefined ? (body.capacity ? Number(body.capacity) : null) : existing.capacity},
         color       = ${body.color !== undefined ? String(body.color) : existing.color},
-        calendar_id = ${body.calendarId !== undefined ? (body.calendarId || null) : existing.calendar_id},
         active      = ${body.active !== undefined ? Boolean(body.active) : existing.active},
         sort_order  = ${body.sortOrder !== undefined ? Number(body.sortOrder) : existing.sort_order}
       WHERE id = ${id}
-      RETURNING id, name, location, capacity, color, calendar_id, active, sort_order
+      RETURNING id, name, location, capacity, color, active, sort_order
     `;
     return Response.json({ room });
   } catch (error) {

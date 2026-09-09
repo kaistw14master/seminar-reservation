@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS rooms (
   location    TEXT,
   capacity    INTEGER,
   color       TEXT NOT NULL DEFAULT '#2563eb',
-  calendar_id TEXT,
   active      BOOLEAN NOT NULL DEFAULT TRUE,
   sort_order  INTEGER NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -22,8 +21,6 @@ CREATE TABLE IF NOT EXISTS reservations (
   user_email      TEXT NOT NULL,
   user_name       TEXT,
   status          TEXT NOT NULL DEFAULT 'confirmed',
-  google_event_id TEXT,
-  sync_error      TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT reservations_status_check CHECK (status IN ('confirmed', 'cancelled')),

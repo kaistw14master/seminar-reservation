@@ -4,7 +4,6 @@ export type Room = {
   location: string | null;
   capacity: number | null;
   color: string;
-  calendar_id: string | null;
   active: boolean;
   sort_order: number;
 };
@@ -24,7 +23,5 @@ export type Reservation = {
   user_name: string | null;
   status: ReservationStatus;
   series_id: string | null;
-  google_event_id: string | null;
-  sync_error: string | null;
   created_at: string;
 };

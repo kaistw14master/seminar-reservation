@@ -10,7 +10,7 @@ export default async function HomePage() {
   const session = await auth();
 
   const rooms = await sql<Room[]>`
-    SELECT id, name, location, capacity, color, calendar_id, active, sort_order
+    SELECT id, name, location, capacity, color, active, sort_order
     FROM rooms
     WHERE active = TRUE
     ORDER BY sort_order, name

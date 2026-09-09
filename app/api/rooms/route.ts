@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const user = await requireUser();
     const rooms = await sql<Room[]>`
-      SELECT id, name, location, capacity, color, calendar_id, active, sort_order
+      SELECT id, name, location, capacity, color, active, sort_order
       FROM rooms
       ${user.isAdmin ? sql`` : sql`WHERE active = TRUE`}
       ORDER BY sort_order, name
@@ -28,16 +28,15 @@ export async function POST(request: Request) {
     if (!name) throw new ValidationError("세미나실 이름을 입력해 주세요.");
 
     const [room] = await sql<Room[]>`
-      INSERT INTO rooms (name, location, capacity, color, calendar_id, sort_order)
+      INSERT INTO rooms (name, location, capacity, color, sort_order)
       VALUES (
         ${name},
         ${body.location ? String(body.location).trim() : null},
         ${body.capacity ? Number(body.capacity) : null},
         ${body.color ? String(body.color) : "#2563eb"},
-        ${body.calendarId ? String(body.calendarId).trim() : null},
         ${Number(body.sortOrder ?? 0)}
       )
-      RETURNING id, name, location, capacity, color, calendar_id, active, sort_order
+      RETURNING id, name, location, capacity, color, active, sort_order
     `;
     return Response.json({ room }, { status: 201 });
   } catch (error) {

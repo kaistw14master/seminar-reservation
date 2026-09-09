@@ -8,13 +8,6 @@ import {
   SLOT_MINUTES,
 } from "./config";
 import { dateKey, minutesBetween, partsInZone } from "./time";
-import {
-  createCalendarEvent,
-  deleteCalendarEvent,
-  isCalendarConfigured,
-  resolveCalendarId,
-  updateCalendarEvent,
-} from "./google-calendar";
 import type { Occurrence } from "./recurrence";
 import type { Reservation } from "./types";
 
@@ -33,7 +26,7 @@ export class ValidationError extends Error {
 const reservationColumns = () => sql`
   r.id, r.room_id, r.title, r.purpose, r.starts_at, r.ends_at,
   r.user_email, r.user_name, r.status, r.series_id,
-  r.google_event_id, r.sync_error, r.created_at,
+  r.created_at,
   rm.name AS room_name, rm.color AS room_color
 `;
 
@@ -168,8 +161,6 @@ export async function createReservation(input: CreateInput): Promise<Reservation
     return row;
   });
 
-  const reservation = await getReservation(created.id);
-  if (reservation) await syncToCalendar(reservation);
   return (await getReservation(created.id))!;
 }
 
@@ -186,7 +177,7 @@ type CreateSeriesInput = Omit<CreateInput, "startsAt" | "endsAt"> & {
   skipConflicts: boolean;
 };
 
-/** 동시 실행 개수를 제한해 순회한다 (캘린더 API 호출이 몰리지 않도록) */
+/** 동시 실행 개수를 제한해 순회한다 */
 async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
   let cursor = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -277,12 +268,7 @@ export async function createReservationSeries(
   const created = (await Promise.all(ids.map((id) => getReservation(id)))).filter(
     (r): r is Reservation => Boolean(r),
   );
-  await mapLimit(created, 4, (reservation) => syncToCalendar(reservation));
-
-  const refreshed = (await Promise.all(ids.map((id) => getReservation(id)))).filter(
-    (r): r is Reservation => Boolean(r),
-  );
-  return { created: refreshed, skipped };
+  return { created, skipped };
 }
 
 type UpdateInput = {
@@ -330,8 +316,6 @@ export async function updateReservation(
     `;
   });
 
-  const updated = await getReservation(id);
-  if (updated) await syncToCalendar(updated);
   return (await getReservation(id))!;
 }
 
@@ -341,16 +325,6 @@ export async function cancelReservation(id: number): Promise<void> {
 
   await sql`UPDATE reservations SET status = 'cancelled', updated_at = now() WHERE id = ${id}`;
 
-  const calendarId = resolveCalendarId(await roomCalendarId(existing.room_id));
-  if (isCalendarConfigured() && calendarId && existing.google_event_id) {
-    try {
-      await deleteCalendarEvent(calendarId, existing.google_event_id);
-      await sql`UPDATE reservations SET google_event_id = NULL, sync_error = NULL WHERE id = ${id}`;
-    } catch (error) {
-      console.error("구글 캘린더 삭제 실패", error);
-      await sql`UPDATE reservations SET sync_error = ${String(error)} WHERE id = ${id}`;
-    }
-  }
 }
 
 /**
@@ -379,50 +353,4 @@ export async function cancelSeries(
   });
 
   return targets.length;
-}
-
-async function roomCalendarId(roomId: number): Promise<string | null> {
-  const [row] = await sql<{ calendar_id: string | null }[]>`
-    SELECT calendar_id FROM rooms WHERE id = ${roomId}
-  `;
-  return row?.calendar_id ?? null;
-}
-
-/** 구글 캘린더 반영. 실패해도 예약 자체는 유지하고 sync_error 에 기록한다. */
-async function syncToCalendar(reservation: Reservation): Promise<void> {
-  const calendarId = resolveCalendarId(await roomCalendarId(reservation.room_id));
-  if (!isCalendarConfigured() || !calendarId) return;
-
-  const [room] = await sql<{ name: string; location: string | null }[]>`
-    SELECT name, location FROM rooms WHERE id = ${reservation.room_id}
-  `;
-
-  const payload = {
-    title: `[${room?.name ?? "세미나실"}] ${reservation.title}`,
-    description: [
-      reservation.purpose ? `목적: ${reservation.purpose}` : null,
-      `예약자: ${reservation.user_name ?? ""} <${reservation.user_email}>`,
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    location: room?.location ?? null,
-    startsAt: new Date(reservation.starts_at),
-    endsAt: new Date(reservation.ends_at),
-  };
-
-  try {
-    if (reservation.google_event_id) {
-      await updateCalendarEvent(calendarId, reservation.google_event_id, payload);
-      await sql`UPDATE reservations SET sync_error = NULL WHERE id = ${reservation.id}`;
-    } else {
-      const eventId = await createCalendarEvent(calendarId, payload);
-      await sql`
-        UPDATE reservations SET google_event_id = ${eventId}, sync_error = NULL
-        WHERE id = ${reservation.id}
-      `;
-    }
-  } catch (error) {
-    console.error("구글 캘린더 동기화 실패", error);
-    await sql`UPDATE reservations SET sync_error = ${String(error)} WHERE id = ${reservation.id}`;
-  }
 }

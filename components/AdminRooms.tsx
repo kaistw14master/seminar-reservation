@@ -11,7 +11,6 @@ const EMPTY_DRAFT = {
   location: "",
   capacity: "",
   color: "#2563eb",
-  calendarId: "",
   sortOrder: "0",
 };
 
@@ -51,7 +50,6 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
       location: draft.location || null,
       capacity: draft.capacity || null,
       color: draft.color,
-      calendarId: draft.calendarId || null,
       sortOrder: Number(draft.sortOrder) || 0,
     });
     if (!data) return;
@@ -112,12 +110,6 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
                 사용
               </label>
 
-              <a
-                href={`/api/ics/${room.id}`}
-                className="rounded-md border border-line px-2.5 py-1.5 text-xs text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
-              >
-                ICS
-              </a>
               <button
                 type="button"
                 disabled={busy}
@@ -128,21 +120,6 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
               </button>
             </div>
 
-            <div className="mt-3">
-              <label className="mb-1 block text-xs text-muted">
-                구글 캘린더 ID (비우면 기본 캘린더 사용)
-              </label>
-              <input
-                type="text"
-                defaultValue={room.calendar_id ?? ""}
-                placeholder="example@group.calendar.google.com"
-                onBlur={(event) => {
-                  const value = event.target.value.trim();
-                  if (value !== (room.calendar_id ?? "")) patch(room.id, { calendarId: value || null });
-                }}
-                className={inputClass}
-              />
-            </div>
           </li>
         ))}
       </ul>
@@ -190,14 +167,6 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
               value={draft.color}
               onChange={(event) => setDraft({ ...draft, color: event.target.value })}
               className="h-10 w-full cursor-pointer rounded-lg border border-line bg-transparent"
-            />
-          </Field>
-          <Field label="구글 캘린더 ID (선택)">
-            <input
-              value={draft.calendarId}
-              onChange={(event) => setDraft({ ...draft, calendarId: event.target.value })}
-              placeholder="example@group.calendar.google.com"
-              className={inputClass}
             />
           </Field>
         </div>

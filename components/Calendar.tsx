@@ -241,13 +241,6 @@ export default function Calendar({
         {loading ? <span className="text-xs text-muted">불러오는 중…</span> : null}
 
         <div className="ml-auto flex items-center gap-2">
-          <a
-            href={`/api/ics/${roomId}`}
-            className="rounded-md border border-line px-3 py-1.5 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
-            title="이 주소를 구글 캘린더의 'URL로 추가'에 붙여넣으면 구독할 수 있습니다"
-          >
-            캘린더 구독(ICS)
-          </a>
           <button
             type="button"
             onClick={() => {
