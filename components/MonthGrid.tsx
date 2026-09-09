@@ -2,7 +2,7 @@
 
 import { DAY_LABELS, dayStart, partsInZone, timeLabel } from "@/lib/time";
 import { labColor, reservationLabel } from "@/lib/labs";
-import { weekendTone } from "@/lib/weekend";
+import { weekendCell, weekendTone } from "@/lib/weekend";
 import type { Reservation } from "@/lib/types";
 
 const MAX_CHIPS = 3;
@@ -74,9 +74,9 @@ export default function MonthGrid({
                 title={isPast ? "지난 날짜에는 예약할 수 없습니다" : undefined}
                 className={`border-b border-l border-line transition ${
                   compact ? "min-h-[62px] p-1" : "min-h-[112px] p-1.5"
-                } ${
-                  isPast ? "slot-past" : "cursor-pointer hover:bg-blue-500/5"
-                } ${inMonth ? "" : "bg-black/[0.02] dark:bg-white/[0.02]"}`}
+                } ${isPast ? "slot-past" : "cell-hover cursor-pointer"} ${weekendCell(
+                  parts.weekday,
+                )} ${inMonth ? "" : "opacity-50"}`}
               >
                 <button
                   type="button"

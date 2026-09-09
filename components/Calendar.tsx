@@ -23,7 +23,7 @@ import {
 } from "@/lib/time";
 import { LABS, labColor, labLabel, reservationLabel } from "@/lib/labs";
 import { useIsNarrow } from "@/lib/use-media";
-import { weekendTone } from "@/lib/weekend";
+import { weekendCell, weekendTone } from "@/lib/weekend";
 import type { Reservation, Room } from "@/lib/types";
 
 const SLOT_PX = 22;
@@ -31,7 +31,7 @@ const SLOTS_PER_DAY = ((CLOSE_HOUR - OPEN_HOUR) * 60) / SLOT_MINUTES;
 const GRID_HEIGHT = SLOTS_PER_DAY * SLOT_PX;
 const DEFAULT_DURATION_SLOTS = Math.max(1, Math.round(60 / SLOT_MINUTES));
 /** 하루 전체를 그리면 세로가 길어지므로, 처음엔 이 시각이 보이도록 스크롤한다 */
-const INITIAL_SCROLL_HOUR = 8;
+const INITIAL_SCROLL_HOUR = 9;
 
 type View = "week" | "month";
 type Selection = { dayKey: string; from: number; to: number };
@@ -102,7 +102,7 @@ export default function Calendar({
     if (view !== "week" || !scrollRef.current) return;
     const offset = ((INITIAL_SCROLL_HOUR - OPEN_HOUR) * 60) / SLOT_MINUTES;
     scrollRef.current.scrollTop = Math.max(0, offset * SLOT_PX);
-  }, [view]);
+  }, [view, isNarrow]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -402,7 +402,7 @@ export default function Calendar({
                     <div
                       key={day}
                       className={`border-l border-line px-2 py-2 text-center ${
-                        isToday ? "bg-blue-50 dark:bg-blue-950/40" : ""
+                        isToday ? "cell-today" : weekendCell(parts.weekday)
                       }`}
                     >
                       <div className={`text-xs ${weekendTone(parts.weekday) || "text-muted"}`}>
@@ -549,12 +549,15 @@ function DayColumn({
   onOpenDetail: (reservation: Reservation) => void;
 }) {
   const open = dayStart(dayKey);
+  const weekday = partsInZone(open).weekday;
   // 마우스면 드래그, 터치면 탭. click 은 스크롤 제스처 뒤에는 발생하지 않아 오작동이 없다.
   const pointerKind = useRef("mouse");
 
   return (
     <div
-      className={`relative border-l border-line ${isToday ? "bg-blue-50/40 dark:bg-blue-950/20" : ""}`}
+      className={`relative border-l border-line ${
+        isToday ? "cell-today" : weekendCell(weekday)
+      }`}
       style={{ height: GRID_HEIGHT }}
     >
       {Array.from({ length: SLOTS_PER_DAY }).map((_, slot) => {

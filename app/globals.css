@@ -68,3 +68,31 @@ body {
     );
   }
 }
+
+/* 달력 칸 배경. 정의 순서가 곧 우선순위이므로 '오늘'을 마지막에 둔다. */
+.cell-sun {
+  background-color: rgba(239, 68, 68, 0.07);
+}
+.cell-sat {
+  background-color: rgba(59, 130, 246, 0.07);
+}
+.cell-today {
+  background-color: rgba(37, 99, 235, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cell-sun {
+    background-color: rgba(248, 113, 113, 0.1);
+  }
+  .cell-sat {
+    background-color: rgba(96, 165, 250, 0.1);
+  }
+  .cell-today {
+    background-color: rgba(59, 130, 246, 0.18);
+  }
+}
+
+/* 클릭 가능한 달력 칸의 호버 강조. 주말/오늘 배경보다 뒤에 정의해 우선하도록 한다. */
+.cell-hover:hover {
+  background-color: rgba(59, 130, 246, 0.12);
+}
