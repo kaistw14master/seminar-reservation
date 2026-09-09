@@ -401,19 +401,24 @@ export default function Calendar({
                   return (
                     <div
                       key={day}
-                      className={`border-l border-line px-2 py-2 text-center ${
-                        isToday ? "cell-today" : weekendCell(parts.weekday, "soft")
-                      }`}
+                      className={`border-l border-line px-2 py-2 text-center ${weekendCell(
+                        parts.weekday,
+                        "soft",
+                      )}`}
                     >
                       <div className={`text-xs ${weekendTone(parts.weekday) || "text-muted"}`}>
                         {DAY_LABELS[parts.weekday]}
                       </div>
-                      <div
-                        className={`text-sm ${
-                          isToday ? "font-semibold text-blue-600" : weekendTone(parts.weekday)
-                        }`}
-                      >
-                        {parts.month}/{parts.day}
+                      <div className="text-sm">
+                        <span
+                          className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 ${
+                            isToday
+                              ? "bg-blue-600 font-semibold text-white"
+                              : weekendTone(parts.weekday)
+                          }`}
+                        >
+                          {parts.month}/{parts.day}
+                        </span>
                       </div>
                     </div>
                   );
@@ -555,9 +560,7 @@ function DayColumn({
 
   return (
     <div
-      className={`relative border-l border-line ${
-        isToday ? "cell-today" : weekendCell(weekday, "soft")
-      }`}
+      className={`relative border-l border-line ${weekendCell(weekday, "soft")}`}
       style={{ height: GRID_HEIGHT }}
     >
       {Array.from({ length: SLOTS_PER_DAY }).map((_, slot) => {

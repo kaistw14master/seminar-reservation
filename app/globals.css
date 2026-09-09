@@ -69,7 +69,7 @@ body {
   }
 }
 
-/* 달력 칸 배경. 정의 순서가 곧 우선순위이므로 '오늘'을 마지막에 둔다. */
+/* 달력 칸 배경. 오늘은 배경 대신 날짜 표시로 구분한다(주말 색과 겹치지 않도록). */
 .cell-sun {
   background-color: rgba(239, 68, 68, 0.07);
 }
@@ -82,9 +82,6 @@ body {
 }
 .cell-sat-soft {
   background-color: rgba(59, 130, 246, 0.035);
-}
-.cell-today {
-  background-color: rgba(37, 99, 235, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -99,9 +96,6 @@ body {
   }
   .cell-sat-soft {
     background-color: rgba(96, 165, 250, 0.05);
-  }
-  .cell-today {
-    background-color: rgba(59, 130, 246, 0.18);
   }
 }
 
