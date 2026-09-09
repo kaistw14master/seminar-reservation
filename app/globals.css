@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e3e6ea;
+  --text: #16191d;
+  --muted: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f1115;
+    --surface: #171a20;
+    --border: #2a2f38;
+    --text: #e8eaed;
+    --muted: #9aa3af;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--text);
+}
+
+body {
+  font-family:
+    "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+    "Malgun Gothic", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 주간 그리드에서 드래그 선택 중 텍스트가 잡히지 않도록 */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
