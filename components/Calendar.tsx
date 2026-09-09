@@ -22,6 +22,7 @@ import {
   weekStartKey,
 } from "@/lib/time";
 import { LABS, labColor, labLabel, reservationLabel } from "@/lib/labs";
+import { useIsNarrow } from "@/lib/use-media";
 import type { Reservation, Room } from "@/lib/types";
 
 const SLOT_PX = 22;
@@ -69,6 +70,9 @@ export default function Calendar({
   const [detail, setDetail] = useState<Reservation | null>(null);
   const [todayKey, setTodayKey] = useState("");
   const [nowMs, setNowMs] = useState(0);
+  // 좁은 화면에서는 주간 대신 하루씩 본다
+  const isNarrow = useIsNarrow();
+  const [selectedDay, setSelectedDay] = useState(initialWeek);
   const [notice, setNotice] = useState<string | null>(null);
 
   const dragging = useRef(false);
@@ -165,6 +169,12 @@ export default function Calendar({
     return map;
   }, [reservations]);
 
+  useEffect(() => {
+    if (view !== "week") return;
+    if (days.includes(selectedDay)) return;
+    setSelectedDay(days.includes(todayKey) ? todayKey : days[0]);
+  }, [days, selectedDay, todayKey, view]);
+
   function shift(direction: -1 | 1) {
     if (view === "week") setWeekKey(dateKeyOfDayStart(weekKey, direction * 7));
     else setMonthKey(shiftMonth(monthKey, direction));
@@ -204,6 +214,9 @@ export default function Calendar({
       current && current.dayKey === dayKey ? { ...current, to: slot } : current,
     );
   }
+
+  const shownDays = view === "week" && isNarrow ? [selectedDay] : days;
+  const gridCols = isNarrow ? "grid-cols-[46px_1fr]" : "grid-cols-[56px_repeat(7,1fr)]";
 
   const rangeLabel =
     view === "week"
@@ -329,15 +342,41 @@ export default function Calendar({
       ) : null}
 
       {view === "week" ? (
+        <>
+        {isNarrow ? (
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {days.map((day) => {
+              const parts = partsInZone(dayStart(day));
+              const active = day === selectedDay;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  className={`flex min-w-[46px] flex-1 flex-col items-center rounded-lg border px-1 py-1.5 text-xs transition ${
+                    active
+                      ? "border-transparent bg-blue-600 text-white"
+                      : day === todayKey
+                        ? "border-blue-400 text-blue-600"
+                        : "border-line text-muted"
+                  }`}
+                >
+                  <span>{DAY_LABELS[parts.weekday]}</span>
+                  <span className="font-medium">{parts.day}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <div className="min-w-[720px]">
+          <div className={isNarrow ? "min-w-0" : "min-w-[720px]"}>
             <div
               ref={scrollRef}
               className="max-h-[calc(100vh-260px)] min-h-[360px] overflow-y-auto"
             >
-              <div className="sticky top-0 z-20 grid grid-cols-[56px_repeat(7,1fr)] border-b border-line bg-surface">
+              <div className={`sticky top-0 z-20 grid border-b border-line bg-surface ${gridCols}`}>
                 <div />
-                {days.map((day) => {
+                {shownDays.map((day) => {
                   const parts = partsInZone(dayStart(day));
                   const isToday = day === todayKey;
                   return (
@@ -356,7 +395,7 @@ export default function Calendar({
                 })}
               </div>
 
-              <div className="no-select grid grid-cols-[56px_repeat(7,1fr)]">
+              <div className={`no-select grid ${gridCols}`}>
                 <div className="relative" style={{ height: GRID_HEIGHT }}>
                   {Array.from({ length: SLOTS_PER_DAY }).map((_, slot) => {
                     const minutes = OPEN_HOUR * 60 + slot * SLOT_MINUTES;
@@ -373,7 +412,7 @@ export default function Calendar({
                   })}
                 </div>
 
-                {days.map((day) => (
+                {shownDays.map((day) => (
                   <DayColumn
                     key={day}
                     dayKey={day}
@@ -391,6 +430,7 @@ export default function Calendar({
             </div>
           </div>
         </div>
+        </>
       ) : (
         <MonthGrid
           monthKey={monthKey}
@@ -398,6 +438,7 @@ export default function Calendar({
           byDay={byDay}
           todayKey={todayKey}
           nowMs={nowMs}
+          compact={isNarrow}
           currentEmail={currentEmail}
           onOpenDetail={setDetail}
           onCreateAt={createAt}

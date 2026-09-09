@@ -12,6 +12,8 @@ type Props = {
   byDay: Map<string, Reservation[]>;
   todayKey: string;
   nowMs: number;
+  /** 좁은 화면: 칸을 줄이고 예약을 점으로만 표시한다 */
+  compact?: boolean;
   currentEmail: string;
   onOpenDetail: (reservation: Reservation) => void;
   onCreateAt: (dayKey: string) => void;
@@ -24,6 +26,7 @@ export default function MonthGrid({
   byDay,
   todayKey,
   nowMs,
+  compact = false,
   currentEmail,
   onOpenDetail,
   onCreateAt,
@@ -31,7 +34,7 @@ export default function MonthGrid({
 }: Props) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-      <div className="min-w-[700px]">
+      <div className={compact ? "min-w-0" : "min-w-[700px]"}>
         <div className="grid grid-cols-7 border-b border-line">
           {days.slice(0, 7).map((day) => {
             const weekday = partsInZone(dayStart(day)).weekday;
@@ -68,7 +71,9 @@ export default function MonthGrid({
                   if (event.target === event.currentTarget) onCreateAt(day);
                 }}
                 title={isPast ? "지난 날짜에는 예약할 수 없습니다" : undefined}
-                className={`min-h-[112px] border-b border-l border-line p-1.5 transition ${
+                className={`border-b border-l border-line transition ${
+                  compact ? "min-h-[62px] p-1" : "min-h-[112px] p-1.5"
+                } ${
                   isPast ? "slot-past" : "cursor-pointer hover:bg-blue-500/5"
                 } ${inMonth ? "" : "bg-black/[0.02] dark:bg-white/[0.02]"}`}
               >
@@ -87,6 +92,23 @@ export default function MonthGrid({
                   {parts.day}
                 </button>
 
+                {compact ? (
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {items.slice(0, 6).map((reservation) => (
+                      <button
+                        key={reservation.id}
+                        type="button"
+                        onClick={() => onOpenDetail(reservation)}
+                        title={`${timeLabel(new Date(reservation.starts_at))}–${timeLabel(
+                          new Date(reservation.ends_at),
+                        )} ${reservationLabel(reservation)}`}
+                        aria-label={reservationLabel(reservation)}
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: labColor(reservation.lab) }}
+                      />
+                    ))}
+                  </div>
+                ) : (
                 <div className="space-y-1">
                   {visible.map((reservation) => {
                     const mine = reservation.user_email === currentEmail;
@@ -123,6 +145,7 @@ export default function MonthGrid({
                     </button>
                   ) : null}
                 </div>
+                )}
               </div>
             );
           })}
