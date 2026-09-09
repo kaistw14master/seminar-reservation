@@ -110,11 +110,9 @@ body {
   background-color: rgba(59, 130, 246, 0.12);
 }
 
-/* 내 예약 강조: 배경과 대비되는 바깥 링 + 왼쪽 흰 막대 */
+/* 내 예약 강조: 배경과 대비되는 바깥 링 */
 .mine {
-  box-shadow:
-    inset 3px 0 0 rgba(255, 255, 255, 0.95),
-    0 0 0 2px rgba(15, 23, 42, 0.55);
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.65);
 }
 .mine-dot {
   box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.55);
@@ -122,9 +120,7 @@ body {
 
 @media (prefers-color-scheme: dark) {
   .mine {
-    box-shadow:
-      inset 3px 0 0 rgba(255, 255, 255, 0.95),
-      0 0 0 2px rgba(226, 232, 240, 0.75);
+    box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.85);
   }
   .mine-dot {
     box-shadow: 0 0 0 2px rgba(226, 232, 240, 0.75);
