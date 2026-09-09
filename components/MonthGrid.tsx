@@ -11,6 +11,7 @@ type Props = {
   days: string[];
   byDay: Map<string, Reservation[]>;
   todayKey: string;
+  nowMs: number;
   currentEmail: string;
   onOpenDetail: (reservation: Reservation) => void;
   onCreateAt: (dayKey: string) => void;
@@ -22,6 +23,7 @@ export default function MonthGrid({
   days,
   byDay,
   todayKey,
+  nowMs,
   currentEmail,
   onOpenDetail,
   onCreateAt,
@@ -51,6 +53,8 @@ export default function MonthGrid({
             const parts = partsInZone(dayStart(day));
             const inMonth = day.slice(0, 7) === monthKey;
             const isToday = day === todayKey;
+            // 오늘 이전 날짜는 예약할 수 없다
+            const isPast = nowMs > 0 && todayKey !== "" && day < todayKey;
             const items = byDay.get(day) ?? [];
             const visible = items.slice(0, MAX_CHIPS);
             const hidden = items.length - visible.length;
@@ -60,11 +64,13 @@ export default function MonthGrid({
                 key={day}
                 onClick={(event) => {
                   // 빈 영역을 눌렀을 때만 새 예약 창을 연다
+                  if (isPast) return;
                   if (event.target === event.currentTarget) onCreateAt(day);
                 }}
-                className={`min-h-[112px] cursor-pointer border-b border-l border-line p-1.5 transition hover:bg-blue-500/5 ${
-                  inMonth ? "" : "bg-black/[0.02] dark:bg-white/[0.02]"
-                }`}
+                title={isPast ? "지난 날짜에는 예약할 수 없습니다" : undefined}
+                className={`min-h-[112px] border-b border-l border-line p-1.5 transition ${
+                  isPast ? "slot-past" : "cursor-pointer hover:bg-blue-500/5"
+                } ${inMonth ? "" : "bg-black/[0.02] dark:bg-white/[0.02]"}`}
               >
                 <button
                   type="button"

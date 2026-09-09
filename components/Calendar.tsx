@@ -66,6 +66,7 @@ export default function Calendar({
   const [dialogSeed, setDialogSeed] = useState<DialogSeed | null>(null);
   const [detail, setDetail] = useState<Reservation | null>(null);
   const [todayKey, setTodayKey] = useState("");
+  const [nowMs, setNowMs] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
 
   const dragging = useRef(false);
@@ -77,7 +78,15 @@ export default function Calendar({
   );
   const room = rooms.find((r) => r.id === roomId) ?? rooms[0];
 
-  useEffect(() => setTodayKey(dateKey(new Date())), []);
+  useEffect(() => {
+    const tick = () => {
+      setTodayKey(dateKey(new Date()));
+      setNowMs(Date.now());
+    };
+    tick();
+    const timer = setInterval(tick, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 주간 보기는 하루 24시간을 모두 그리므로 업무 시간대로 스크롤을 맞춰 둔다
   useEffect(() => {
@@ -361,6 +370,7 @@ export default function Calendar({
                     key={day}
                     dayKey={day}
                     isToday={day === todayKey}
+                    nowMs={nowMs}
                     reservations={byDay.get(day) ?? []}
                     currentEmail={currentEmail}
                     selection={selection?.dayKey === day ? selection : null}
@@ -379,6 +389,7 @@ export default function Calendar({
           days={days}
           byDay={byDay}
           todayKey={todayKey}
+          nowMs={nowMs}
           currentEmail={currentEmail}
           onOpenDetail={setDetail}
           onCreateAt={createAt}
@@ -442,6 +453,7 @@ export default function Calendar({
 function DayColumn({
   dayKey,
   isToday,
+  nowMs,
   reservations,
   currentEmail,
   selection,
@@ -451,6 +463,7 @@ function DayColumn({
 }: {
   dayKey: string;
   isToday: boolean;
+  nowMs: number;
   reservations: Reservation[];
   currentEmail: string;
   selection: Selection | null;
@@ -467,18 +480,39 @@ function DayColumn({
     >
       {Array.from({ length: SLOTS_PER_DAY }).map((_, slot) => {
         const isHour = (OPEN_HOUR * 60 + slot * SLOT_MINUTES) % 60 === 0;
+        // 슬롯이 끝나는 시각이 이미 지났으면 예약할 수 없다
+        const past =
+          nowMs > 0 &&
+          open.getTime() + (OPEN_HOUR * 60 + (slot + 1) * SLOT_MINUTES) * 60_000 <= nowMs;
         return (
           <div
             key={slot}
-            onPointerDown={() => onStartDrag(dayKey, slot)}
-            onPointerEnter={() => onExtendDrag(dayKey, slot)}
-            className={`absolute inset-x-0 cursor-pointer transition-colors hover:bg-blue-500/10 ${
-              isHour ? "border-t border-line" : "border-t border-line/40"
-            }`}
+            onPointerDown={past ? undefined : () => onStartDrag(dayKey, slot)}
+            onPointerEnter={past ? undefined : () => onExtendDrag(dayKey, slot)}
+            title={past ? "이미 지난 시간은 예약할 수 없습니다" : undefined}
+            className={`absolute inset-x-0 transition-colors ${
+              past ? "slot-past" : "cursor-pointer hover:bg-blue-500/10"
+            } ${isHour ? "border-t border-line" : "border-t border-line/40"}`}
             style={{ top: slot * SLOT_PX, height: SLOT_PX }}
           />
         );
       })}
+
+      {/* 오늘 칸에는 현재 시각선을 그린다 */}
+      {isToday && nowMs > 0
+        ? (() => {
+            const offset = ((nowMs - open.getTime()) / 60_000 - OPEN_HOUR * 60) / SLOT_MINUTES;
+            if (offset < 0 || offset > SLOTS_PER_DAY) return null;
+            return (
+              <div
+                className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-red-500"
+                style={{ top: offset * SLOT_PX }}
+              >
+                <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-500" />
+              </div>
+            );
+          })()
+        : null}
 
       {selection ? (
         <div
