@@ -98,9 +98,9 @@ export function weekStartKey(date: Date, startsOn: 0 | 1 = 1): string {
   return dateKeyOfDayStart(dateKey(date), delta);
 }
 
-/** 월요일부터 7일간의 날짜키 */
-export function weekDayKeys(mondayKey: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => dateKeyOfDayStart(mondayKey, i));
+/** 주 시작일부터 7일간의 날짜키 */
+export function weekDayKeys(weekStart: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => dateKeyOfDayStart(weekStart, i));
 }
 
 /** "2026-09" (타임존 기준) */

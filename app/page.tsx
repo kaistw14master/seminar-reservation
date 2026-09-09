@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await auth();
-  const initialWeek = weekStartKey(new Date());
+  const initialWeek = weekStartKey(new Date(), 0);
 
   const rooms = await sql<Room[]>`
     SELECT id, name, location, capacity, color, active, sort_order

@@ -34,7 +34,7 @@ export function normalizeRule(raw: unknown): RecurrenceRule {
     new Set((Array.isArray(rule?.weekdays) ? rule.weekdays : []).map(Number)),
   )
     .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
-    .sort((a, b) => offsetFromMonday(a) - offsetFromMonday(b));
+    .sort((a, b) => a - b); // 일요일부터
   if (weekdays.length === 0) {
     throw new RecurrenceError("반복할 요일을 하나 이상 선택해 주세요.");
   }
@@ -65,7 +65,8 @@ export function expandOccurrences(
   }
 
   const occurrences: Occurrence[] = [];
-  const anchor = weekStartKey(startsAt); // 시작일이 속한 주의 월요일
+  // offsetFromMonday 와 짝을 이루므로 앵커는 반드시 월요일이어야 한다 (화면 기준과 무관)
+  const anchor = weekStartKey(startsAt, 1);
 
   for (let week = 0; ; week += rule.intervalWeeks) {
     const weekStart = dateKeyOfDayStart(anchor, week * 7);
@@ -108,7 +109,7 @@ export function describeRule(rule: RecurrenceRule, count: number): string {
         : `${rule.intervalWeeks}주마다`;
   const days = rule.weekdays
     .slice()
-    .sort((a, b) => offsetFromMonday(a) - offsetFromMonday(b))
+    .sort((a, b) => a - b)
     .map((d) => WEEKDAY_LABELS[d])
     .join("·");
   return `${interval} ${days} · 총 ${count}회`;

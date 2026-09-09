@@ -41,7 +41,7 @@ eq("매주 월·수(첫 주 월 제외)", keys(occ), "2026-09-09, 2026-09-14, 20
 occ = expandOccurrences(start, end, { intervalWeeks: 1, weekdays: [3, 1], until: "2026-09-16" });
 eq("요일 입력 순서 무관", keys(occ), "2026-09-09, 2026-09-14, 2026-09-16");
 
-// 일요일 포함 — 주의 마지막이므로 월요일 기준 정렬에서 맨 뒤
+// 월+일 조합 (생성 순서와 무관하게 시각순으로 정렬되어 나온다)
 const sunStart = zonedTime(2026, 9, 7, 10, 0); // 월요일
 occ = expandOccurrences(sunStart, zonedTime(2026, 9, 7, 11, 0), {
   intervalWeeks: 1,
@@ -95,6 +95,24 @@ eq(
   occ.every((o) => [1, 3].includes(partsInZone(o.startsAt).weekday)),
   "true",
 );
+
+// 격주 + 일요일: 주 경계 기준이 바뀌면 결과가 달라지는 조합이라 고정해 둔다.
+// (화면은 일요일 시작이지만 반복 계산의 앵커는 월요일이다 — offsetFromMonday 와 짝이므로)
+occ = expandOccurrences(start, end, { intervalWeeks: 2, weekdays: [0], until: "2026-10-31" });
+eq("격주 일요일", keys(occ), "2026-09-13, 2026-09-27, 2026-10-11, 2026-10-25");
+eq(
+  "격주 간격이 정확히 14일",
+  occ.every((o, i) => i === 0 || (o.startsAt - occ[i - 1].startsAt) / 86400000 === 14),
+  "true",
+);
+
+// 요일 정렬이 일요일부터가 되었는지 (화면 순서와 일치)
+eq(
+  "normalizeRule 일요일 우선 정렬",
+  normalizeRule({ intervalWeeks: 1, weekdays: [3, 0, 1], until: "2026-10-01" }).weekdays.join(","),
+  "0,1,3",
+);
+eq("describeRule 일요일 우선", describeRule({ intervalWeeks: 1, weekdays: [3, 0], until: "x" }, 4), "매주 일·수 · 총 4회");
 
 let failed = 0;
 for (const [label, ok, actual, expected] of checks) {

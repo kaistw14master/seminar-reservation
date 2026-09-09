@@ -36,8 +36,8 @@ type Props = {
 const inputClass =
   "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
 
-/** 그리드와 같은 월~일 순서 */
-const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+/** 달력과 같은 일~토 순서 */
+const WEEKDAY_ORDER = [0, 1, 2, 3, 4, 5, 6];
 
 const INTERVALS = [
   { value: 1, label: "매주" },

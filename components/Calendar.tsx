@@ -187,7 +187,7 @@ export default function Calendar({
   }
 
   function openWeekOf(day: string) {
-    setWeekKey(weekStartKey(dayStart(day)));
+    setWeekKey(weekStartKey(dayStart(day), 0));
     setView("week");
   }
 
