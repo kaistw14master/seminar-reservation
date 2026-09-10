@@ -110,23 +110,23 @@ body {
 .mine {
   box-shadow:
     0 0 0 2px var(--surface),
-    0 0 0 4px #059669;
+    0 0 0 5px #059669;
 }
 .mine-dot {
   box-shadow:
     0 0 0 1px var(--surface),
-    0 0 0 3px #059669;
+    0 0 0 4px #059669;
 }
 
 @media (prefers-color-scheme: dark) {
   .mine {
     box-shadow:
       0 0 0 2px var(--surface),
-      0 0 0 4px #34d399;
+      0 0 0 5px #34d399;
   }
   .mine-dot {
     box-shadow:
       0 0 0 1px var(--surface),
-      0 0 0 3px #34d399;
+      0 0 0 4px #34d399;
   }
 }
