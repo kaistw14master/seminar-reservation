@@ -31,7 +31,10 @@ type Props = {
   seed: DialogSeed;
   rooms: Room[];
   onClose: () => void;
-  onSaved: (reservation: Reservation, summary: { created: number; skipped: number }) => void;
+  onSaved: (
+    reservation: Reservation,
+    summary: { created: number; skipped: number; updated: number },
+  ) => void;
 };
 
 const inputClass =
@@ -147,6 +150,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
       onSaved(data.reservation as Reservation, {
         created: Number(data.created ?? 1),
         skipped: Array.isArray(data.skipped) ? data.skipped.length : 0,
+        updated: Number(data.updated ?? 1),
       });
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해 주세요.");
@@ -474,7 +478,9 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             {saving
               ? "저장 중..."
               : isEdit
-                ? "수정하기"
+                ? seed.seriesId && editScope === "following"
+                  ? "이후 전체 수정"
+                  : "수정하기"
                 : repeat && preview && preview.occurrences.length > 0
                   ? `${preview.occurrences.length}회 예약하기`
                   : "예약하기"}

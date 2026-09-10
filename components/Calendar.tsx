@@ -568,7 +568,9 @@ export default function Calendar({
               summary.created > 1
                 ? `반복 예약 ${summary.created}회를 등록했습니다.` +
                     (summary.skipped > 0 ? ` (겹치는 ${summary.skipped}회 제외)` : "")
-                : null,
+                : summary.updated > 1
+                  ? `반복 예약 ${summary.updated}회를 수정했습니다.`
+                  : null,
             );
             if (saved.room_id !== roomId) setRoomId(saved.room_id);
             else void load({ fresh: true });
@@ -590,6 +592,7 @@ export default function Calendar({
               endsAt: new Date(detail.ends_at),
               lab: detail.lab,
               participants: detail.participants ?? "",
+              seriesId: detail.series_id,
             });
             setDetail(null);
           }}
