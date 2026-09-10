@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import {
   addMinutes,
-  addMonthsToDateKey,
   dateKey,
   dateKeyOfDayStart,
   formatDateKey,
@@ -61,26 +60,6 @@ const INTERVALS = [
   { value: 3, label: "3주마다" },
   { value: 4, label: "4주마다" },
 ];
-
-/**
- * 단위별 조절 버튼. 브라우저가 날짜·시각 입력에서 어느 칸(시/분/일)에
- * 포커스가 있는지 알려주지 않기 때문에, 단위를 버튼에 적어 구분한다.
- */
-function Stepper({ unit, onStep }: { unit: string; onStep: (delta: 1 | -1) => void }) {
-  const arrowClass =
-    "px-1 text-[9px] leading-none text-muted transition hover:bg-black/5 dark:hover:bg-white/10";
-  return (
-    <div className="flex w-9 shrink-0 flex-col justify-between overflow-hidden rounded-lg border border-line py-0.5">
-      <button type="button" aria-label={`${unit} 늘리기`} onClick={() => onStep(1)} className={arrowClass}>
-        ▲
-      </button>
-      <span className="text-center text-[10px] leading-none text-muted">{unit}</span>
-      <button type="button" aria-label={`${unit} 줄이기`} onClick={() => onStep(-1)} className={arrowClass}>
-        ▼
-      </button>
-    </div>
-  );
-}
 
 export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Props) {
   const [roomId, setRoomId] = useState(seed.roomId);
@@ -194,32 +173,6 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
       return;
     }
     setEnd(nextEnd);
-  }
-
-  /** 화살표로 단위별 조절 */
-  function stepStartMinutes(amount: number) {
-    const current = fromLocalInput(start);
-    if (Number.isNaN(current.getTime())) return;
-    changeStart(toLocalInput(addMinutes(current, amount)));
-  }
-
-  function stepEndMinutes(amount: number) {
-    const current = fromLocalInput(end);
-    if (Number.isNaN(current.getTime())) return;
-    changeEnd(toLocalInput(addMinutes(current, amount)));
-  }
-
-  function stepStartDate(delta: 1 | -1) {
-    changeStartDate(dateKeyOfDayStart(startDate, delta));
-  }
-
-  function stepStartMonth(delta: 1 | -1) {
-    changeStartDate(addMonthsToDateKey(startDate, delta));
-  }
-
-  function stepUntil(next: string) {
-    if (next < startDate) return; // 시작 날짜보다 앞설 수 없다
-    setUntil(next);
   }
 
   function toggleWeekday(day: number) {
@@ -385,82 +338,60 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="col-span-2">
               <label className="mb-1 block text-sm font-medium">반복 시작 날짜</label>
-              <div className="flex items-stretch gap-1.5">
-                <input
+              <input
                 type="date"
                 required
                 value={startDate}
                 onChange={(event) => changeStartDate(event.target.value)}
                 className={inputClass}
-                />
-                <Stepper unit="월" onStep={stepStartMonth} />
-                <Stepper unit="일" onStep={stepStartDate} />
-              </div>
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">시작 시각</label>
-              <div className="flex items-stretch gap-1.5">
-                <input
-                  type="time"
-                  required
-                  step={SLOT_MINUTES * 60}
-                  value={startTime}
-                  onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
-                  className={inputClass}
-                />
-                <Stepper unit="시" onStep={(d) => stepStartMinutes(d * 60)} />
-                <Stepper unit="분" onStep={(d) => stepStartMinutes(d * SLOT_MINUTES)} />
-              </div>
+              <input
+                type="time"
+                required
+                step={SLOT_MINUTES * 60}
+                value={startTime}
+                onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
+                className={inputClass}
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">종료 시각</label>
-              <div className="flex items-stretch gap-1.5">
-                <input
-                  type="time"
-                  required
-                  step={SLOT_MINUTES * 60}
-                  value={endTime}
-                  onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
-                  className={inputClass}
-                />
-                <Stepper unit="시" onStep={(d) => stepEndMinutes(d * 60)} />
-                <Stepper unit="분" onStep={(d) => stepEndMinutes(d * SLOT_MINUTES)} />
-              </div>
+              <input
+                type="time"
+                required
+                step={SLOT_MINUTES * 60}
+                value={endTime}
+                onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
+                className={inputClass}
+              />
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">시작</label>
-              <div className="flex items-stretch gap-1.5">
-                <input
-                  type="datetime-local"
-                  required
-                  step={SLOT_MINUTES * 60}
-                  value={start}
-                  onChange={(event) => changeStart(event.target.value)}
-                  className={inputClass}
-                />
-                <Stepper unit="일" onStep={(d) => stepStartMinutes(d * 24 * 60)} />
-                <Stepper unit="시" onStep={(d) => stepStartMinutes(d * 60)} />
-                <Stepper unit="분" onStep={(d) => stepStartMinutes(d * SLOT_MINUTES)} />
-              </div>
+              <input
+                type="datetime-local"
+                required
+                step={SLOT_MINUTES * 60}
+                value={start}
+                onChange={(event) => changeStart(event.target.value)}
+                className={inputClass}
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">종료</label>
-              <div className="flex items-stretch gap-1.5">
-                <input
-                  type="datetime-local"
-                  required
-                  step={SLOT_MINUTES * 60}
-                  value={end}
-                  onChange={(event) => changeEnd(event.target.value)}
-                  className={inputClass}
-                />
-                <Stepper unit="일" onStep={(d) => stepEndMinutes(d * 24 * 60)} />
-                <Stepper unit="시" onStep={(d) => stepEndMinutes(d * 60)} />
-                <Stepper unit="분" onStep={(d) => stepEndMinutes(d * SLOT_MINUTES)} />
-              </div>
+              <input
+                type="datetime-local"
+                required
+                step={SLOT_MINUTES * 60}
+                value={end}
+                onChange={(event) => changeEnd(event.target.value)}
+                className={inputClass}
+              />
             </div>
           </div>
         )}
@@ -604,17 +535,13 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
 
                 <div>
                   <label className="mb-1 block text-xs text-muted">반복 종료 날짜 (이 날짜 포함)</label>
-                  <div className="flex items-stretch gap-1.5">
-                    <input
-                      type="date"
-                      value={until}
-                      min={startDate}
-                      onChange={(event) => setUntil(event.target.value)}
-                      className={inputClass}
-                    />
-                    <Stepper unit="월" onStep={(d) => stepUntil(addMonthsToDateKey(until, d))} />
-                    <Stepper unit="일" onStep={(d) => stepUntil(dateKeyOfDayStart(until, d))} />
-                  </div>
+                  <input
+                    type="date"
+                    value={until}
+                    min={startDate}
+                    onChange={(event) => setUntil(event.target.value)}
+                    className={inputClass}
+                  />
                 </div>
 
                 {preview?.error ? (

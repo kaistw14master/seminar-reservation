@@ -130,20 +130,6 @@ export function monthGridKeys(key: string): string[] {
   return keys;
 }
 
-/**
- * 날짜키를 개월 단위로 옮긴다. 옮긴 달에 그 날짜가 없으면 말일로 맞춘다.
- * (1월 31일 + 1개월 = 2월 28일)
- */
-export function addMonthsToDateKey(key: string, delta: number): string {
-  const [year, month, day] = key.split("-").map(Number);
-  const total = year * 12 + (month - 1) + delta;
-  const nextYear = Math.floor(total / 12);
-  const nextMonth = (total % 12) + 1;
-  const monthKey = `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
-  const lastDay = Number(dateKeyOfDayStart(`${shiftMonth(monthKey, 1)}-01`, -1).split("-")[2]);
-  return `${monthKey}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
-}
-
 export function formatMonth(key: string): string {
   const [year, month] = key.split("-").map(Number);
   return `${year}년 ${month}월`;
