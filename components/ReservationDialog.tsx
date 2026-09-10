@@ -61,6 +61,27 @@ const INTERVALS = [
   { value: 4, label: "4주마다" },
 ];
 
+/** 숫자 입력 옆에 붙는 위아래 조절 버튼 */
+function Stepper({ label, onStep }: { label: string; onStep: (delta: 1 | -1) => void }) {
+  const buttonClass =
+    "flex h-1/2 items-center justify-center px-2 text-[10px] leading-none text-muted transition hover:bg-black/5 dark:hover:bg-white/10";
+  return (
+    <div className="flex w-8 shrink-0 flex-col overflow-hidden rounded-lg border border-line">
+      <button type="button" aria-label={`${label} 늘리기`} onClick={() => onStep(1)} className={buttonClass}>
+        ▲
+      </button>
+      <button
+        type="button"
+        aria-label={`${label} 줄이기`}
+        onClick={() => onStep(-1)}
+        className={`${buttonClass} border-t border-line`}
+      >
+        ▼
+      </button>
+    </div>
+  );
+}
+
 export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Props) {
   const [roomId, setRoomId] = useState(seed.roomId);
   const [start, setStart] = useState(toLocalInput(seed.startsAt));
@@ -175,13 +196,39 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
     setEnd(nextEnd);
   }
 
+  /** 화살표로 조절: 시각은 슬롯 단위, 날짜는 하루 단위 */
+  function stepStart(delta: 1 | -1) {
+    const current = fromLocalInput(start);
+    if (Number.isNaN(current.getTime())) return;
+    changeStart(toLocalInput(addMinutes(current, delta * SLOT_MINUTES)));
+  }
+
+  function stepEnd(delta: 1 | -1) {
+    const current = fromLocalInput(end);
+    if (Number.isNaN(current.getTime())) return;
+    changeEnd(toLocalInput(addMinutes(current, delta * SLOT_MINUTES)));
+  }
+
+  function stepStartDate(delta: 1 | -1) {
+    changeStartDate(dateKeyOfDayStart(startDate, delta));
+  }
+
+  function stepUntil(delta: 1 | -1) {
+    const next = dateKeyOfDayStart(until, delta);
+    if (next < startDate) return; // 시작 날짜보다 앞설 수 없다
+    setUntil(next);
+  }
+
   function toggleWeekday(day: number) {
     setWeekdays((current) =>
       current.includes(day) ? current.filter((d) => d !== day) : [...current, day],
     );
   }
 
-  async function submit(event: React.FormEvent | null, skipConflicts = false) {
+  async function submit(
+    event: React.FormEvent | null,
+    conflictMode: "abort" | "skip" | "keep" = "abort",
+  ) {
     event?.preventDefault();
     setError(null);
     setSaving(true);
@@ -195,7 +242,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
     };
     if (useRecurrence) {
       payload.recurrence = rule;
-      payload.skipConflicts = skipConflicts;
+      payload.skipConflicts = conflictMode === "skip";
+      payload.conflictMode = conflictMode;
     }
 
     try {
@@ -265,25 +313,45 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
           </p>
         ) : null}
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => setConflicts(null)}
-            className="rounded-lg border border-line px-4 py-2 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
-          >
-            다시 설정
-          </button>
+        <div className="mt-5 space-y-2">
           <button
             type="button"
             disabled={saving || remaining <= 0}
-            onClick={() => submit(null, true)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+            onClick={() => submit(null, "skip")}
+            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-left text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
           >
             {remaining <= 0
-              ? "예약 가능한 회차 없음"
-              : saving
-                ? "예약 중..."
-                : `겹치는 회차 빼고 ${remaining}회 예약`}
+              ? "진행할 수 있는 회차가 없습니다"
+              : `겹치는 ${conflicts.length}회는 ${seriesEdit ? "삭제하고" : "빼고"} 나머지 ${remaining}회 ${
+                  seriesEdit ? "변경" : "예약"
+                }`}
+            <span className="mt-0.5 block text-xs font-normal opacity-80">
+              {seriesEdit
+                ? "겹치는 날짜에는 예약이 남지 않습니다."
+                : "겹치는 날짜는 만들지 않습니다."}
+            </span>
+          </button>
+
+          {seriesEdit ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => submit(null, "keep")}
+              className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
+            >
+              겹치는 주는 그대로 두고 나머지만 변경
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                겹친 주는 기존 일정이 그대로 남습니다.
+              </span>
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => setConflicts(null)}
+            className="w-full rounded-lg px-4 py-2 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            전체 일정 다시 설정
           </button>
         </div>
       </Modal>
@@ -314,60 +382,75 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="col-span-2">
               <label className="mb-1 block text-sm font-medium">반복 시작 날짜</label>
-              <input
+              <div className="flex items-stretch gap-1.5">
+                <input
                 type="date"
                 required
                 value={startDate}
                 onChange={(event) => changeStartDate(event.target.value)}
                 className={inputClass}
-              />
+                />
+                <Stepper label="날짜" onStep={stepStartDate} />
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">시작 시각</label>
-              <input
-                type="time"
-                required
-                step={SLOT_MINUTES * 60}
-                value={startTime}
-                onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
-                className={inputClass}
-              />
+              <div className="flex items-stretch gap-1.5">
+                <input
+                  type="time"
+                  required
+                  step={SLOT_MINUTES * 60}
+                  value={startTime}
+                  onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
+                  className={inputClass}
+                />
+                <Stepper label="시작 시각" onStep={stepStart} />
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">종료 시각</label>
-              <input
-                type="time"
-                required
-                step={SLOT_MINUTES * 60}
-                value={endTime}
-                onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
-                className={inputClass}
-              />
+              <div className="flex items-stretch gap-1.5">
+                <input
+                  type="time"
+                  required
+                  step={SLOT_MINUTES * 60}
+                  value={endTime}
+                  onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
+                  className={inputClass}
+                />
+                <Stepper label="종료 시각" onStep={stepEnd} />
+              </div>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">시작</label>
-              <input
-                type="datetime-local"
-                required
-                step={SLOT_MINUTES * 60}
-                value={start}
-                onChange={(event) => changeStart(event.target.value)}
-                className={inputClass}
-              />
+              <div className="flex items-stretch gap-1.5">
+                <input
+                  type="datetime-local"
+                  required
+                  step={SLOT_MINUTES * 60}
+                  value={start}
+                  onChange={(event) => changeStart(event.target.value)}
+                  className={inputClass}
+                />
+                <Stepper label="시작" onStep={stepStart} />
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">종료</label>
-              <input
-                type="datetime-local"
-                required
-                step={SLOT_MINUTES * 60}
-                value={end}
-                onChange={(event) => changeEnd(event.target.value)}
-                className={inputClass}
-              />
+              <div className="flex items-stretch gap-1.5">
+                <input
+                  type="datetime-local"
+                  required
+                  step={SLOT_MINUTES * 60}
+                  value={end}
+                  onChange={(event) => changeEnd(event.target.value)}
+                  className={inputClass}
+                />
+                <Stepper label="종료" onStep={stepEnd} />
+              </div>
             </div>
           </div>
         )}
@@ -511,13 +594,16 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
 
                 <div>
                   <label className="mb-1 block text-xs text-muted">반복 종료 날짜 (이 날짜 포함)</label>
-                  <input
-                    type="date"
-                    value={until}
-                    min={startDate}
-                    onChange={(event) => setUntil(event.target.value)}
-                    className={inputClass}
-                  />
+                  <div className="flex items-stretch gap-1.5">
+                    <input
+                      type="date"
+                      value={until}
+                      min={startDate}
+                      onChange={(event) => setUntil(event.target.value)}
+                      className={inputClass}
+                    />
+                    <Stepper label="반복 종료 날짜" onStep={stepUntil} />
+                  </div>
                 </div>
 
                 {preview?.error ? (

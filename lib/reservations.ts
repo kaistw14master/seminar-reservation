@@ -13,6 +13,7 @@ import {
   dayStart,
   minutesBetween,
   partsInZone,
+  weekStartKey,
   zonedTime,
 } from "./time";
 import { reservationLabel } from "./labs";
@@ -517,8 +518,18 @@ export async function replaceSeriesFollowing(input: {
   lab?: string;
   participants?: string | null;
   occurrences: Occurrence[];
-  skipConflicts: boolean;
-}): Promise<{ created: Reservation[]; skipped: SeriesConflict[]; removed: number }> {
+  /**
+   * abort : 하나라도 겹치면 아무것도 바꾸지 않고 충돌 목록을 돌려준다 (기본)
+   * skip  : 겹치는 회차는 만들지 않는다 (그 주의 기존 회차도 사라진다)
+   * keep  : 겹치는 주는 기존 회차를 그대로 두고 나머지 주만 새 일정으로 바꾼다
+   */
+  conflictMode: "abort" | "skip" | "keep";
+}): Promise<{
+  created: Reservation[];
+  skipped: SeriesConflict[];
+  removed: number;
+  kept: number;
+}> {
   const base = await getReservation(input.reservationId);
   if (!base || base.status !== "confirmed") {
     throw new ValidationError("예약을 찾을 수 없습니다.", 404);
@@ -533,27 +544,34 @@ export async function replaceSeriesFollowing(input: {
   const lab = input.lab ?? base.lab;
   const participants = input.participants === undefined ? base.participants : input.participants;
 
+  // "겹치는 주는 그대로" 를 판단하려면 회차를 주 단위로 묶어야 한다.
+  // 화면 기준과 무관하게 월요일 시작으로 세어 옛 회차와 새 회차를 같은 자로 잰다.
+  const anchor = dayStart(weekStartKey(new Date(base.starts_at), 1)).getTime();
+  const weekOf = (date: Date) =>
+    Math.floor((dayStart(dateKey(date)).getTime() - anchor) / (7 * 86_400_000));
+
   const outcome = await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${base.room_id})`;
 
-    // 기존 이후 회차를 먼저 비운다. 취소된 행은 겹침 검사에서 빠지므로
-    // 새 회차가 옛 회차와 겹치는 것으로 잘못 판정되지 않는다.
-    const removedRows = await tx`
-      UPDATE reservations SET status = 'cancelled', updated_at = now()
+    const oldRows = await tx<{ id: number; starts_at: string }[]>`
+      SELECT id, starts_at FROM reservations
       WHERE series_id = ${seriesId}
         AND status = 'confirmed'
         AND starts_at >= ${base.starts_at}
-      RETURNING id
+      ORDER BY starts_at
     `;
+    const oldIds = oldRows.map((row) => row.id);
 
-    const inserted: number[] = [];
+    // 어느 회차가 겹치는지 먼저 확인한다. 이 시리즈의 기존 회차는
+    // 곧 치워질 것이므로 검사에서 제외한다.
     const conflicts: SeriesConflict[] = [];
-
+    const conflictWeeks = new Set<number>();
     for (const occurrence of input.occurrences) {
       const [hit] = await tx<{ lab: string; participants: string | null }[]>`
         SELECT lab, participants FROM reservations
         WHERE room_id = ${base.room_id}
           AND status = 'confirmed'
+          AND id <> ALL(${oldIds})
           AND starts_at < ${occurrence.endsAt}
           AND ends_at > ${occurrence.startsAt}
         LIMIT 1
@@ -564,8 +582,36 @@ export async function replaceSeriesFollowing(input: {
           endsAt: occurrence.endsAt.toISOString(),
           conflictWith: reservationLabel(hit),
         });
-        continue;
+        conflictWeeks.add(weekOf(occurrence.startsAt));
       }
+    }
+
+    if (conflicts.length > 0 && input.conflictMode === "abort") {
+      throw new ValidationError(`${conflicts.length}개 회차가 기존 예약과 겹칩니다.`, 409, {
+        conflicts,
+        total: input.occurrences.length,
+      });
+    }
+
+    // keep 이면 겹친 주의 기존 회차는 건드리지 않는다
+    const keepWeeks = input.conflictMode === "keep" ? conflictWeeks : new Set<number>();
+    const removeIds = oldRows
+      .filter((row) => !keepWeeks.has(weekOf(new Date(row.starts_at))))
+      .map((row) => row.id);
+    const keptCount = oldIds.length - removeIds.length;
+
+    if (removeIds.length > 0) {
+      await tx`
+        UPDATE reservations SET status = 'cancelled', updated_at = now()
+        WHERE id = ANY(${removeIds})
+      `;
+    }
+
+    const conflictStarts = new Set(conflicts.map((item) => item.startsAt));
+    const inserted: number[] = [];
+    for (const occurrence of input.occurrences) {
+      if (conflictStarts.has(occurrence.startsAt.toISOString())) continue;
+      if (keepWeeks.has(weekOf(occurrence.startsAt))) continue;
 
       const [row] = await tx<{ id: number }[]>`
         INSERT INTO reservations
@@ -580,27 +626,31 @@ export async function replaceSeriesFollowing(input: {
       inserted.push(row.id);
     }
 
-    if (conflicts.length > 0 && !input.skipConflicts) {
-      throw new ValidationError(`${conflicts.length}개 회차가 기존 예약과 겹칩니다.`, 409, {
-        conflicts,
-        total: input.occurrences.length,
-      });
-    }
-    if (inserted.length === 0) {
+    if (inserted.length === 0 && keptCount === 0) {
       throw new ValidationError("모든 회차가 기존 예약과 겹쳐 수정할 수 없습니다.", 409, {
         conflicts,
         total: input.occurrences.length,
       });
     }
 
-    return { ids: inserted, skipped: conflicts, removed: removedRows.length };
+    return {
+      ids: inserted,
+      skipped: conflicts,
+      removed: removeIds.length,
+      kept: keptCount,
+    };
   });
 
   invalidateReservationCache();
   const created = (await Promise.all(outcome.ids.map((id) => getReservation(id)))).filter(
     (row): row is Reservation => Boolean(row),
   );
-  return { created, skipped: outcome.skipped, removed: outcome.removed };
+  return {
+    created,
+    skipped: outcome.skipped,
+    removed: outcome.removed,
+    kept: outcome.kept,
+  };
 }
 
 /** 반복 예약의 기준 회차 이후에서 반복 규칙을 되짚어 낸다 (수정 창 기본값용) */

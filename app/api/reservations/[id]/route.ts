@@ -77,17 +77,22 @@ export async function PATCH(request: Request, { params }: Context) {
           throw error;
         }
 
-        const { created, skipped } = await replaceSeriesFollowing({
+        const mode =
+          body.conflictMode === "skip" || body.conflictMode === "keep"
+            ? body.conflictMode
+            : "abort";
+        const { created, skipped, kept } = await replaceSeriesFollowing({
           reservationId: id,
           lab: changes.lab,
           participants: changes.participants,
           occurrences,
-          skipConflicts: body.skipConflicts === true,
+          conflictMode: mode,
         });
         return Response.json({
-          reservation: created[0],
+          reservation: created[0] ?? (await getReservation(id)),
           updated: created.length,
           skipped,
+          kept,
         });
       }
 
