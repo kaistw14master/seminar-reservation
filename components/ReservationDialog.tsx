@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import {
   addMinutes,
+  addMonthsToDateKey,
   dateKey,
   dateKeyOfDayStart,
   formatDateKey,
@@ -61,21 +62,20 @@ const INTERVALS = [
   { value: 4, label: "4주마다" },
 ];
 
-/** 숫자 입력 옆에 붙는 위아래 조절 버튼 */
-function Stepper({ label, onStep }: { label: string; onStep: (delta: 1 | -1) => void }) {
-  const buttonClass =
-    "flex h-1/2 items-center justify-center px-2 text-[10px] leading-none text-muted transition hover:bg-black/5 dark:hover:bg-white/10";
+/**
+ * 단위별 조절 버튼. 브라우저가 날짜·시각 입력에서 어느 칸(시/분/일)에
+ * 포커스가 있는지 알려주지 않기 때문에, 단위를 버튼에 적어 구분한다.
+ */
+function Stepper({ unit, onStep }: { unit: string; onStep: (delta: 1 | -1) => void }) {
+  const arrowClass =
+    "px-1 text-[9px] leading-none text-muted transition hover:bg-black/5 dark:hover:bg-white/10";
   return (
-    <div className="flex w-8 shrink-0 flex-col overflow-hidden rounded-lg border border-line">
-      <button type="button" aria-label={`${label} 늘리기`} onClick={() => onStep(1)} className={buttonClass}>
+    <div className="flex w-9 shrink-0 flex-col justify-between overflow-hidden rounded-lg border border-line py-0.5">
+      <button type="button" aria-label={`${unit} 늘리기`} onClick={() => onStep(1)} className={arrowClass}>
         ▲
       </button>
-      <button
-        type="button"
-        aria-label={`${label} 줄이기`}
-        onClick={() => onStep(-1)}
-        className={`${buttonClass} border-t border-line`}
-      >
+      <span className="text-center text-[10px] leading-none text-muted">{unit}</span>
+      <button type="button" aria-label={`${unit} 줄이기`} onClick={() => onStep(-1)} className={arrowClass}>
         ▼
       </button>
     </div>
@@ -196,25 +196,28 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
     setEnd(nextEnd);
   }
 
-  /** 화살표로 조절: 시각은 슬롯 단위, 날짜는 하루 단위 */
-  function stepStart(delta: 1 | -1) {
+  /** 화살표로 단위별 조절 */
+  function stepStartMinutes(amount: number) {
     const current = fromLocalInput(start);
     if (Number.isNaN(current.getTime())) return;
-    changeStart(toLocalInput(addMinutes(current, delta * SLOT_MINUTES)));
+    changeStart(toLocalInput(addMinutes(current, amount)));
   }
 
-  function stepEnd(delta: 1 | -1) {
+  function stepEndMinutes(amount: number) {
     const current = fromLocalInput(end);
     if (Number.isNaN(current.getTime())) return;
-    changeEnd(toLocalInput(addMinutes(current, delta * SLOT_MINUTES)));
+    changeEnd(toLocalInput(addMinutes(current, amount)));
   }
 
   function stepStartDate(delta: 1 | -1) {
     changeStartDate(dateKeyOfDayStart(startDate, delta));
   }
 
-  function stepUntil(delta: 1 | -1) {
-    const next = dateKeyOfDayStart(until, delta);
+  function stepStartMonth(delta: 1 | -1) {
+    changeStartDate(addMonthsToDateKey(startDate, delta));
+  }
+
+  function stepUntil(next: string) {
     if (next < startDate) return; // 시작 날짜보다 앞설 수 없다
     setUntil(next);
   }
@@ -390,7 +393,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                 onChange={(event) => changeStartDate(event.target.value)}
                 className={inputClass}
                 />
-                <Stepper label="날짜" onStep={stepStartDate} />
+                <Stepper unit="월" onStep={stepStartMonth} />
+                <Stepper unit="일" onStep={stepStartDate} />
               </div>
             </div>
             <div>
@@ -404,7 +408,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                   onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
                   className={inputClass}
                 />
-                <Stepper label="시작 시각" onStep={stepStart} />
+                <Stepper unit="시" onStep={(d) => stepStartMinutes(d * 60)} />
+                <Stepper unit="분" onStep={(d) => stepStartMinutes(d * SLOT_MINUTES)} />
               </div>
             </div>
             <div>
@@ -418,7 +423,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                   onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
                   className={inputClass}
                 />
-                <Stepper label="종료 시각" onStep={stepEnd} />
+                <Stepper unit="시" onStep={(d) => stepEndMinutes(d * 60)} />
+                <Stepper unit="분" onStep={(d) => stepEndMinutes(d * SLOT_MINUTES)} />
               </div>
             </div>
           </div>
@@ -435,7 +441,9 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                   onChange={(event) => changeStart(event.target.value)}
                   className={inputClass}
                 />
-                <Stepper label="시작" onStep={stepStart} />
+                <Stepper unit="일" onStep={(d) => stepStartMinutes(d * 24 * 60)} />
+                <Stepper unit="시" onStep={(d) => stepStartMinutes(d * 60)} />
+                <Stepper unit="분" onStep={(d) => stepStartMinutes(d * SLOT_MINUTES)} />
               </div>
             </div>
             <div>
@@ -449,7 +457,9 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                   onChange={(event) => changeEnd(event.target.value)}
                   className={inputClass}
                 />
-                <Stepper label="종료" onStep={stepEnd} />
+                <Stepper unit="일" onStep={(d) => stepEndMinutes(d * 24 * 60)} />
+                <Stepper unit="시" onStep={(d) => stepEndMinutes(d * 60)} />
+                <Stepper unit="분" onStep={(d) => stepEndMinutes(d * SLOT_MINUTES)} />
               </div>
             </div>
           </div>
@@ -602,7 +612,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                       onChange={(event) => setUntil(event.target.value)}
                       className={inputClass}
                     />
-                    <Stepper label="반복 종료 날짜" onStep={stepUntil} />
+                    <Stepper unit="월" onStep={(d) => stepUntil(addMonthsToDateKey(until, d))} />
+                    <Stepper unit="일" onStep={(d) => stepUntil(dateKeyOfDayStart(until, d))} />
                   </div>
                 </div>
 

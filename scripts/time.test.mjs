@@ -1,7 +1,7 @@
 import {
   dateKey, dayStart, weekStartKey, weekDayKeys, dateKeyOfDayStart,
   fromLocalInput, toLocalInput, timeLabel, partsInZone, formatRange, addMinutes,
-  monthKeyOf, monthGridKeys, shiftMonth, formatMonth,
+  monthKeyOf, monthGridKeys, shiftMonth, formatMonth, addMonthsToDateKey,
 } from "../lib/time.ts";
 
 const checks = [];
@@ -63,6 +63,15 @@ eq("shiftMonth -13", shiftMonth("2027-01", -13), "2025-12");
 eq("주간 보기는 월요일 시작 유지", weekStartKey(new Date("2026-09-09T05:00:00Z")), "2026-09-07");
 eq("일요일 시작 계산", weekStartKey(new Date("2026-09-09T05:00:00Z"), 0), "2026-09-06");
 eq("formatMonth", formatMonth("2026-09"), "2026년 9월");
+
+// --- 개월 단위 이동 ---
+eq("한 달 뒤", addMonthsToDateKey("2026-09-15", 1), "2026-10-15");
+eq("한 달 앞", addMonthsToDateKey("2026-09-15", -1), "2026-08-15");
+eq("연말 넘김", addMonthsToDateKey("2026-12-10", 1), "2027-01-10");
+eq("연초 넘김", addMonthsToDateKey("2027-01-10", -1), "2026-12-10");
+eq("말일 보정 (1/31 + 1개월)", addMonthsToDateKey("2027-01-31", 1), "2027-02-28");
+eq("윤년 말일 보정", addMonthsToDateKey("2028-01-31", 1), "2028-02-29");
+eq("31일 -> 30일 달", addMonthsToDateKey("2026-10-31", 1), "2026-11-30");
 
 let failed = 0;
 for (const [label, ok, actual, expected] of checks) {
