@@ -13,6 +13,9 @@ seminar-reservation-*.json
 *service-account*.json
 *-key.json
 
+# 백업 파일에는 예약자 이름·이메일이 들어 있다
+backups/
+
 # 환경변수: 실제 값은 커밋하지 않는다.
 # 주의 - 부정 패턴(!)은 반드시 마지막에 둬야 예외가 살아난다.
 #        Vercel CLI 가 파일 끝에 .env* 를 덧붙이면 이 예외가 무력화되므로 확인할 것.

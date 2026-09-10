@@ -10,7 +10,8 @@
     "db:init": "node scripts/init-db.mjs",
     "db:seed": "node scripts/init-db.mjs --seed",
     "test": "node scripts/time.test.mjs && npx tsx scripts/recurrence.test.mjs",
-    "db:purge": "npx tsx scripts/purge.mjs"
+    "db:purge": "npx tsx scripts/purge.mjs",
+    "db:backup": "node scripts/backup.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
