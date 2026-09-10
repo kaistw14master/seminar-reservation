@@ -274,14 +274,18 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             type="button"
             disabled={saving || remaining <= 0}
             onClick={() => submit(null, "skip")}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-left text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+            className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
           >
-            {remaining <= 0
-              ? "진행할 수 있는 회차가 없습니다"
-              : `겹치는 ${conflicts.length}회는 ${seriesEdit ? "삭제하고" : "빼고"} 나머지 ${remaining}회 ${
-                  seriesEdit ? "변경" : "예약"
-                }`}
-            <span className="mt-0.5 block text-xs font-normal opacity-80">
+            {remaining <= 0 ? (
+              "진행할 수 있는 회차가 없습니다"
+            ) : (
+              <>
+                겹치는 {conflicts.length}회는{" "}
+                <strong className="font-bold">{seriesEdit ? "삭제하고" : "빼고"}</strong> 나머지{" "}
+                {remaining}회 {seriesEdit ? "변경" : "예약"}
+              </>
+            )}
+            <span className="mt-0.5 block text-xs font-normal text-muted">
               {seriesEdit
                 ? "겹치는 날짜에는 예약이 남지 않습니다."
                 : "겹치는 날짜는 만들지 않습니다."}
@@ -295,7 +299,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
               onClick={() => submit(null, "keep")}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
             >
-              겹치는 주는 그대로 두고 나머지만 변경
+              겹치는 주는 <strong className="font-bold">그대로 두고</strong> 나머지만 변경
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 겹친 주는 기존 일정이 그대로 남습니다.
               </span>

@@ -378,7 +378,13 @@ export async function updateReservation(
 export async function updateSeriesFollowing(
   reservationId: number,
   input: UpdateInput,
-): Promise<{ updated: number }> {
+  /**
+   * abort : 하나라도 겹치면 아무것도 옮기지 않고 충돌 목록을 돌려준다 (기본)
+   * skip  : 겹치는 회차는 삭제하고 나머지만 옮긴다
+   * keep  : 겹치는 회차는 원래 자리에 그대로 두고 나머지만 옮긴다
+   */
+  conflictMode: "abort" | "skip" | "keep" = "abort",
+): Promise<{ updated: number; skipped: SeriesConflict[]; removed: number; kept: number }> {
   const base = await getReservation(reservationId);
   if (!base || base.status !== "confirmed") {
     throw new ValidationError("예약을 찾을 수 없습니다.", 404);
@@ -417,15 +423,17 @@ export async function updateSeriesFollowing(
     const endsAt = zonedTime(year, month, day, to.hour, to.minute);
 
     validateTimes(startsAt, endsAt);
-    return { id: row.id, startsAt, endsAt };
+    return { id: row.id, startsAt, endsAt, wasStart: rowStart, wasEnd: rowEnd };
   });
 
   const ids = planned.map((p) => p.id);
+  const selfLabel = reservationLabel(base);
 
-  await sql.begin(async (tx) => {
+  const outcome = await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${base.room_id})`;
 
     const conflicts: SeriesConflict[] = [];
+    const blocked = new Set<number>();
     for (const item of planned) {
       // 함께 옮겨지는 회차들은 검사에서 제외한다
       const [hit] = await tx<{ lab: string; participants: string | null }[]>`
@@ -438,6 +446,7 @@ export async function updateSeriesFollowing(
         LIMIT 1
       `;
       if (hit) {
+        blocked.add(item.id);
         conflicts.push({
           startsAt: item.startsAt.toISOString(),
           endsAt: item.endsAt.toISOString(),
@@ -446,7 +455,7 @@ export async function updateSeriesFollowing(
       }
     }
 
-    if (conflicts.length > 0) {
+    if (conflicts.length > 0 && conflictMode === "abort") {
       throw new ValidationError(
         `${conflicts.length}개 회차가 기존 예약과 겹쳐 수정할 수 없습니다.`,
         409,
@@ -454,7 +463,51 @@ export async function updateSeriesFollowing(
       );
     }
 
-    for (const item of planned) {
+    if (conflictMode === "keep") {
+      // 그대로 두는 회차는 원래 자리를 계속 차지한다.
+      // 옮기는 회차가 그 자리와 다시 겹칠 수 있으므로 더 늘지 않을 때까지 확인한다.
+      for (let changed = true; changed; ) {
+        changed = false;
+        const staying = planned.filter((item) => blocked.has(item.id));
+        for (const item of planned) {
+          if (blocked.has(item.id)) continue;
+          const hit = staying.find(
+            (stay) => stay.wasStart < item.endsAt && stay.wasEnd > item.startsAt,
+          );
+          if (!hit) continue;
+          blocked.add(item.id);
+          conflicts.push({
+            startsAt: item.startsAt.toISOString(),
+            endsAt: item.endsAt.toISOString(),
+            conflictWith: selfLabel,
+          });
+          changed = true;
+        }
+      }
+    }
+
+    const moving = planned.filter((item) => !blocked.has(item.id));
+    if (moving.length === 0) {
+      throw new ValidationError("모든 회차가 기존 예약과 겹쳐 수정할 수 없습니다.", 409, {
+        conflicts,
+        total: planned.length,
+      });
+    }
+
+    // skip 이면 겹치는 회차는 지운다. 먼저 지워야 그 자리가 비면서
+    // 뒤이은 UPDATE 가 겹침 제약에 걸리지 않는다.
+    const removeIds = conflictMode === "skip" ? [...blocked] : [];
+    if (removeIds.length > 0) {
+      await tx`
+        UPDATE reservations SET status = 'cancelled', updated_at = now()
+        WHERE id = ANY(${removeIds})
+      `;
+    }
+
+    // 시리즈 전체를 같은 방향으로 밀면 앞 회차가 뒤 회차의 원래 자리로 들어간다.
+    // 뒤에서부터(뒤로 밀 때) 고쳐야 중간 단계에서 겹침 제약에 걸리지 않는다.
+    const order = dayDelta > 0 ? [...moving].reverse() : moving;
+    for (const item of order) {
       await tx`
         UPDATE reservations SET
           lab          = ${input.lab ?? base.lab},
@@ -465,10 +518,17 @@ export async function updateSeriesFollowing(
         WHERE id = ${item.id}
       `;
     }
+
+    return {
+      updated: moving.length,
+      skipped: conflicts,
+      removed: removeIds.length,
+      kept: conflictMode === "keep" ? blocked.size : 0,
+    };
   });
 
   invalidateReservationCache();
-  return { updated: planned.length };
+  return outcome;
 }
 
 export async function cancelReservation(id: number): Promise<void> {

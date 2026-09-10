@@ -156,7 +156,7 @@ export default function ReservationDetail({
               type="button"
               disabled={working}
               onClick={() => cancel("following")}
-              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-60"
+              className="rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
             >
               이 회차 이후 전체
             </button>

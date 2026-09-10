@@ -60,6 +60,11 @@ export async function PATCH(request: Request, { params }: Context) {
 
     // scope=following 이면 기준 회차와 그 이후를 함께 고친다
     if (new URL(request.url).searchParams.get("scope") === "following") {
+      const mode =
+        body.conflictMode === "skip" || body.conflictMode === "keep"
+          ? body.conflictMode
+          : "abort";
+
       // 반복 규칙이 함께 오면 요일까지 바뀔 수 있으므로 이후 회차를 새로 만든다
       if (body.recurrence) {
         if (!changes.startsAt || !changes.endsAt) {
@@ -77,10 +82,6 @@ export async function PATCH(request: Request, { params }: Context) {
           throw error;
         }
 
-        const mode =
-          body.conflictMode === "skip" || body.conflictMode === "keep"
-            ? body.conflictMode
-            : "abort";
         const { created, skipped, kept } = await replaceSeriesFollowing({
           reservationId: id,
           lab: changes.lab,
@@ -96,9 +97,9 @@ export async function PATCH(request: Request, { params }: Context) {
         });
       }
 
-      const { updated } = await updateSeriesFollowing(id, changes);
+      const { updated, skipped, removed, kept } = await updateSeriesFollowing(id, changes, mode);
       const reservation = await getReservation(id);
-      return Response.json({ reservation, updated });
+      return Response.json({ reservation, updated, skipped, removed, kept });
     }
 
     const reservation = await updateReservation(id, changes);

@@ -135,6 +135,14 @@ export default function Calendar({
     startsAt: Date;
     endsAt: Date;
   } | null>(null);
+  // 이후 회차까지 옮기다 겹쳤을 때 어떻게 할지 물어보기 위한 상태
+  const [moveConflict, setMoveConflict] = useState<{
+    id: number;
+    startsAt: Date;
+    endsAt: Date;
+    conflicts: { startsAt: string; endsAt: string; conflictWith: string }[];
+    total: number;
+  } | null>(null);
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const loadedAtRef = useRef(Date.now());
   const reservationsRef = useRef(reservations);
@@ -388,7 +396,13 @@ export default function Calendar({
 
   /** 옮긴 결과를 서버에 반영한다 */
   const patchTimes = useCallback(
-    async (id: number, startsAt: Date, endsAt: Date, scope: "single" | "following") => {
+    async (
+      id: number,
+      startsAt: Date,
+      endsAt: Date,
+      scope: "single" | "following",
+      conflictMode?: "skip" | "keep",
+    ) => {
       try {
         const response = await fetch(`/api/reservations/${id}?scope=${scope}`, {
           method: "PATCH",
@@ -396,17 +410,38 @@ export default function Calendar({
           body: JSON.stringify({
             startsAt: startsAt.toISOString(),
             endsAt: endsAt.toISOString(),
+            ...(conflictMode ? { conflictMode } : {}),
           }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
+          // 이후 회차까지 옮기다 겹쳤다면 어떻게 할지 물어본다
+          if (
+            scope === "following" &&
+            !conflictMode &&
+            Array.isArray(data.conflicts) &&
+            data.conflicts.length > 0
+          ) {
+            setMoveConflict({
+              id,
+              startsAt,
+              endsAt,
+              conflicts: data.conflicts,
+              total: Number(data.total) || data.conflicts.length,
+            });
+            return; // 답을 기다리는 동안에는 화면을 되돌리지 않는다
+          }
+          setNotice(data.error ?? "예약을 옮기지 못했습니다.");
+        } else if (scope === "following" && Number(data.updated) >= 1) {
+          const removed = Number(data.removed) || 0;
+          const kept = Number(data.kept) || 0;
           setNotice(
-            Array.isArray(data.conflicts) && data.conflicts.length > 0
-              ? `${data.conflicts.length}개 회차가 다른 예약과 겹쳐 옮기지 못했습니다. 수정 창에서 조정해 주세요.`
-              : (data.error ?? "예약을 옮기지 못했습니다."),
+            removed > 0
+              ? `${data.updated}회를 옮기고 겹치는 ${removed}회는 삭제했습니다.`
+              : kept > 0
+                ? `${data.updated}회를 옮기고 겹치는 ${kept}회는 그대로 두었습니다.`
+                : `반복 예약 ${data.updated}회를 함께 옮겼습니다.`,
           );
-        } else if (scope === "following" && Number(data.updated) > 1) {
-          setNotice(`반복 예약 ${data.updated}회를 함께 옮겼습니다.`);
         }
       } catch {
         setNotice("네트워크 오류로 옮기지 못했습니다.");
@@ -868,9 +903,12 @@ export default function Calendar({
                 setPendingMove(null);
                 void patchTimes(move.id, move.startsAt, move.endsAt, "single");
               }}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-left text-sm font-medium text-white transition hover:bg-blue-700"
+              className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
             >
               이 회차만 옮기기
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                다른 회차는 지금 자리에 그대로 있습니다.
+              </span>
             </button>
             <button
               type="button"
@@ -890,6 +928,79 @@ export default function Calendar({
               type="button"
               onClick={() => {
                 setPendingMove(null);
+                void load({ silent: true, fresh: true });
+              }}
+              className="w-full rounded-lg px-4 py-2 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              되돌리기
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {moveConflict ? (
+        <Modal
+          title="겹치는 회차가 있습니다"
+          onClose={() => {
+            setMoveConflict(null);
+            void load({ silent: true, fresh: true }); // 되돌린다
+          }}
+        >
+          <p className="text-sm">
+            이후 회차까지 옮기면 {moveConflict.total}회 중 {moveConflict.conflicts.length}회가 이미
+            있는 예약과 겹칩니다.
+          </p>
+          <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-muted">
+            {moveConflict.conflicts.map((item) => (
+              <li key={item.startsAt}>
+                {formatRange(item.startsAt, item.endsAt)} · {item.conflictWith}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-5 space-y-2">
+            <button
+              type="button"
+              disabled={moveConflict.total - moveConflict.conflicts.length <= 0}
+              onClick={() => {
+                const move = moveConflict;
+                setMoveConflict(null);
+                void patchTimes(move.id, move.startsAt, move.endsAt, "following", "skip");
+              }}
+              className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
+            >
+              {moveConflict.total - moveConflict.conflicts.length <= 0 ? (
+                "옮길 수 있는 회차가 없습니다"
+              ) : (
+                <>
+                  겹치는 {moveConflict.conflicts.length}회는{" "}
+                  <strong className="font-bold">삭제하고</strong> 나머지{" "}
+                  {moveConflict.total - moveConflict.conflicts.length}회 옮기기
+                </>
+              )}
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                겹치는 날짜에는 예약이 남지 않습니다.
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={moveConflict.total - moveConflict.conflicts.length <= 0}
+              onClick={() => {
+                const move = moveConflict;
+                setMoveConflict(null);
+                void patchTimes(move.id, move.startsAt, move.endsAt, "following", "keep");
+              }}
+              className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
+            >
+              겹치는 회차는 <strong className="font-bold">그대로 두고</strong> 나머지만 옮기기
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                겹치는 회차는 지금 자리에 그대로 남습니다.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMoveConflict(null);
                 void load({ silent: true, fresh: true });
               }}
               className="w-full rounded-lg px-4 py-2 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
