@@ -623,6 +623,8 @@ function DayColumn({
         const rawHeight = (minutesBetween(startsAt, endsAt) / SLOT_MINUTES) * SLOT_PX;
         const height = Math.max(SLOT_PX - 2, Math.min(rawHeight, GRID_HEIGHT - top));
         const mine = reservation.user_email === currentEmail;
+        // 내 예약은 바깥 링이 붙어 있으므로 조금 더 안쪽으로 그려 이웃 일정을 덜 침범한다
+        const inset = mine ? 3 : 1;
 
         return (
           <button
@@ -635,8 +637,8 @@ function DayColumn({
               mine ? "mine" : "shadow-sm"
             }`}
             style={{
-              top: top + 1,
-              height: height - 2,
+              top: top + inset,
+              height: Math.max(12, height - inset * 2),
               backgroundColor: labColor(reservation.lab),
             }}
           >

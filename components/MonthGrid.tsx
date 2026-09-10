@@ -112,7 +112,7 @@ export default function MonthGrid({
                     ))}
                   </div>
                 ) : (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {visible.map((reservation) => {
                     const mine = reservation.user_email === currentEmail;
                     return (
