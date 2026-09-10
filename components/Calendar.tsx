@@ -631,8 +631,8 @@ function DayColumn({
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onOpenDetail(reservation)}
             title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
-            className={`absolute inset-x-1 overflow-hidden rounded-md text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
-              mine ? "mine px-2 py-1.5" : "px-1.5 py-0.5 shadow-sm"
+            className={`absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
+              mine ? "mine" : "shadow-sm"
             }`}
             style={{
               top: top + 1,
