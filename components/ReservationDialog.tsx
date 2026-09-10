@@ -365,8 +365,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             </div>
             {editScope === "following" ? (
               <p className="mt-2 text-xs text-muted">
-                각 회차의 날짜는 그대로 두고 시각만 바뀝니다. 한 회차라도 다른 예약과 겹치면
-                전체가 취소되고 겹친 날짜를 알려드립니다.
+이 회차를 옮긴 만큼 이후 회차도 함께 옮겨집니다 (예: 목요일 → 수요일로 바꾸면 이후도 모두 수요일). 한 회차라도 다른 예약과 겹치면 전체가 취소되고 겹친 날짜를 알려드립니다.
               </p>
             ) : null}
           </div>

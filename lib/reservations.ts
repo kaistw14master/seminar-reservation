@@ -7,7 +7,14 @@ import {
   OPEN_HOUR,
   SLOT_MINUTES,
 } from "./config";
-import { dateKey, minutesBetween, partsInZone, zonedTime } from "./time";
+import {
+  dateKey,
+  dateKeyOfDayStart,
+  dayStart,
+  minutesBetween,
+  partsInZone,
+  zonedTime,
+} from "./time";
 import { reservationLabel } from "./labs";
 import type { Occurrence } from "./recurrence";
 import type { Reservation } from "./types";
@@ -377,9 +384,16 @@ export async function updateSeriesFollowing(
   }
   if (!base.series_id) throw new ValidationError("반복 예약이 아닙니다.");
 
-  // 바꾸려는 시:분 (날짜는 회차별로 유지한다)
+  // 바꾸려는 시:분
   const startClock = input.startsAt ? partsInZone(input.startsAt) : null;
   const endClock = input.endsAt ? partsInZone(input.endsAt) : null;
+
+  // 기준 회차를 며칠 옮겼는지. 이후 회차도 같은 일수만큼 옮겨
+  // 요일 변경(목 -> 수)이 시리즈 전체에 반영되게 한다. 간격은 그대로 유지된다.
+  const baseKey = dateKey(new Date(base.starts_at));
+  const dayDelta = input.startsAt
+    ? Math.round((dayStart(dateKey(input.startsAt)).getTime() - dayStart(baseKey).getTime()) / 86_400_000)
+    : 0;
 
   const targets = await sql<{ id: number; starts_at: string; ends_at: string }[]>`
     SELECT id, starts_at, ends_at FROM reservations
@@ -391,13 +405,16 @@ export async function updateSeriesFollowing(
   if (targets.length === 0) throw new ValidationError("수정할 회차가 없습니다.", 404);
 
   const planned = targets.map((row) => {
-    const day = partsInZone(new Date(row.starts_at));
-    const startsAt = startClock
-      ? zonedTime(day.year, day.month, day.day, startClock.hour, startClock.minute)
-      : new Date(row.starts_at);
-    const endsAt = endClock
-      ? zonedTime(day.year, day.month, day.day, endClock.hour, endClock.minute)
-      : new Date(row.ends_at);
+    const rowStart = new Date(row.starts_at);
+    const rowEnd = new Date(row.ends_at);
+    const shifted = dateKeyOfDayStart(dateKey(rowStart), dayDelta);
+    const [year, month, day] = shifted.split("-").map(Number);
+
+    const from = startClock ?? partsInZone(rowStart);
+    const to = endClock ?? partsInZone(rowEnd);
+    const startsAt = zonedTime(year, month, day, from.hour, from.minute);
+    const endsAt = zonedTime(year, month, day, to.hour, to.minute);
+
     validateTimes(startsAt, endsAt);
     return { id: row.id, startsAt, endsAt };
   });
