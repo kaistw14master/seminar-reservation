@@ -905,7 +905,7 @@ export default function Calendar({
               }}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
             >
-              이 회차만 옮기기
+              <strong className="font-bold">이 회차만</strong> 옮기기
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 다른 회차는 지금 자리에 그대로 있습니다.
               </span>
@@ -919,7 +919,7 @@ export default function Calendar({
               }}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
             >
-              이 회차 이후 전체 옮기기
+              <strong className="font-bold">이 회차 이후 전체</strong> 옮기기
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 옮긴 만큼 이후 회차도 같이 움직입니다.
               </span>
@@ -974,7 +974,7 @@ export default function Calendar({
               ) : (
                 <>
                   겹치는 {moveConflict.conflicts.length}회는{" "}
-                  <strong className="font-bold">삭제하고</strong> 나머지{" "}
+                  <strong className="font-bold text-red-600 dark:text-red-400">삭제하고</strong> 나머지{" "}
                   {moveConflict.total - moveConflict.conflicts.length}회 옮기기
                 </>
               )}
@@ -992,7 +992,7 @@ export default function Calendar({
               }}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
             >
-              겹치는 회차는 <strong className="font-bold">그대로 두고</strong> 나머지만 옮기기
+              겹치는 회차는 <strong className="font-bold text-emerald-600 dark:text-emerald-400">그대로 두고</strong> 나머지만 옮기기
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 겹치는 회차는 지금 자리에 그대로 남습니다.
               </span>

@@ -148,7 +148,7 @@ export default function ReservationDetail({
               type="button"
               disabled={working}
               onClick={() => cancel("single")}
-              className="rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
+              className="rounded-lg border border-red-600/35 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-600/10 disabled:opacity-60 dark:border-red-400/35 dark:text-red-400 dark:hover:bg-red-400/10"
             >
               이 회차만
             </button>
@@ -156,7 +156,7 @@ export default function ReservationDetail({
               type="button"
               disabled={working}
               onClick={() => cancel("following")}
-              className="rounded-lg border border-line px-3 py-2 text-sm transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
+              className="rounded-lg border border-red-600/35 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-600/10 disabled:opacity-60 dark:border-red-400/35 dark:text-red-400 dark:hover:bg-red-400/10"
             >
               이 회차 이후 전체
             </button>

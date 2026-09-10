@@ -281,7 +281,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             ) : (
               <>
                 겹치는 {conflicts.length}회는{" "}
-                <strong className="font-bold">{seriesEdit ? "삭제하고" : "빼고"}</strong> 나머지{" "}
+                <strong className="font-bold text-red-600 dark:text-red-400">{seriesEdit ? "삭제하고" : "빼고"}</strong> 나머지{" "}
                 {remaining}회 {seriesEdit ? "변경" : "예약"}
               </>
             )}
@@ -299,7 +299,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
               onClick={() => submit(null, "keep")}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 disabled:opacity-60 dark:hover:bg-white/10"
             >
-              겹치는 주는 <strong className="font-bold">그대로 두고</strong> 나머지만 변경
+              겹치는 주는 <strong className="font-bold text-emerald-600 dark:text-emerald-400">그대로 두고</strong> 나머지만 변경
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 겹친 주는 기존 일정이 그대로 남습니다.
               </span>
