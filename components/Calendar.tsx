@@ -314,7 +314,7 @@ export default function Calendar({
         ))}
         <span className="flex items-center gap-1.5">
           <span className="mine-dot h-2 w-2 rounded-full bg-muted" />
-          청록 테두리는 내 예약
+          테두리 표시는 내 예약
         </span>
       </div>
 
