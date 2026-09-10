@@ -22,6 +22,7 @@ export type DialogSeed = {
   endsAt: Date;
   lab?: string;
   participants?: string;
+  seriesId?: string | null;
 };
 
 type Conflict = { startsAt: string; endsAt: string; conflictWith: string };
@@ -56,6 +57,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
+  // 반복 예약 수정 범위
+  const [editScope, setEditScope] = useState<"single" | "following">("single");
 
   const isEdit = seed.mode === "edit";
 
@@ -119,7 +122,9 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
 
     try {
       const response = await fetch(
-        isEdit ? `/api/reservations/${seed.reservationId}` : "/api/reservations",
+        isEdit
+          ? `/api/reservations/${seed.reservationId}?scope=${editScope}`
+          : "/api/reservations",
         {
           method: isEdit ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -329,6 +334,39 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             className={inputClass}
           />
         </div>
+
+        {isEdit && seed.seriesId ? (
+          <div className="rounded-xl border border-line p-3">
+            <p className="mb-2 text-sm font-medium">어디까지 반영할까요?</p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { value: "single", label: "이 회차만" },
+                  { value: "following", label: "이 회차 이후 전체" },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setEditScope(option.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm transition ${
+                    editScope === option.value
+                      ? "border-transparent bg-blue-600 font-medium text-white"
+                      : "border-line text-muted hover:bg-black/5 dark:hover:bg-white/10"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {editScope === "following" ? (
+              <p className="mt-2 text-xs text-muted">
+                각 회차의 날짜는 그대로 두고 시각만 바뀝니다. 한 회차라도 다른 예약과 겹치면
+                전체가 취소되고 겹친 날짜를 알려드립니다.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {!isEdit ? (
           <div className="rounded-xl border border-line p-3">

@@ -4,6 +4,7 @@ import {
   cancelSeries,
   getReservation,
   updateReservation,
+  updateSeriesFollowing,
 } from "@/lib/reservations";
 import { isLabId } from "@/lib/labs";
 import { errorResponse, requireUser } from "@/lib/session";
@@ -34,14 +35,23 @@ export async function PATCH(request: Request, { params }: Context) {
     if (body.lab !== undefined && !isLabId(body.lab)) {
       throw new ValidationError("연구실을 선택해 주세요.");
     }
-    const reservation = await updateReservation(id, {
+    const changes = {
       lab: body.lab !== undefined ? String(body.lab) : undefined,
       participants:
         body.participants !== undefined ? String(body.participants).trim() || null : undefined,
       startsAt: body.startsAt !== undefined ? new Date(body.startsAt) : undefined,
       endsAt: body.endsAt !== undefined ? new Date(body.endsAt) : undefined,
-    });
-    return Response.json({ reservation });
+    };
+
+    // scope=following 이면 기준 회차와 그 이후를 함께 고친다
+    if (new URL(request.url).searchParams.get("scope") === "following") {
+      const { updated } = await updateSeriesFollowing(id, changes);
+      const reservation = await getReservation(id);
+      return Response.json({ reservation, updated });
+    }
+
+    const reservation = await updateReservation(id, changes);
+    return Response.json({ reservation, updated: 1 });
   } catch (error) {
     return errorResponse(error);
   }

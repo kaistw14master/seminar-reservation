@@ -7,7 +7,7 @@ import {
   OPEN_HOUR,
   SLOT_MINUTES,
 } from "./config";
-import { dateKey, minutesBetween, partsInZone } from "./time";
+import { dateKey, minutesBetween, partsInZone, zonedTime } from "./time";
 import { reservationLabel } from "./labs";
 import type { Occurrence } from "./recurrence";
 import type { Reservation } from "./types";
@@ -359,6 +359,98 @@ export async function updateReservation(
 
   invalidateReservationCache();
   return (await getReservation(id))!;
+}
+
+/**
+ * 반복 예약 일괄 수정. 기준 회차와 그 이후 회차에 함께 적용한다.
+ * 시각을 바꾸면 각 회차의 "날짜는 그대로, 시:분만" 바뀐다.
+ * 한 회차라도 다른 예약과 겹치면 전체를 거부한다 (일부만 바뀌어 시리즈가
+ * 어긋나는 상태를 만들지 않기 위해서다).
+ */
+export async function updateSeriesFollowing(
+  reservationId: number,
+  input: UpdateInput,
+): Promise<{ updated: number }> {
+  const base = await getReservation(reservationId);
+  if (!base || base.status !== "confirmed") {
+    throw new ValidationError("예약을 찾을 수 없습니다.", 404);
+  }
+  if (!base.series_id) throw new ValidationError("반복 예약이 아닙니다.");
+
+  // 바꾸려는 시:분 (날짜는 회차별로 유지한다)
+  const startClock = input.startsAt ? partsInZone(input.startsAt) : null;
+  const endClock = input.endsAt ? partsInZone(input.endsAt) : null;
+
+  const targets = await sql<{ id: number; starts_at: string; ends_at: string }[]>`
+    SELECT id, starts_at, ends_at FROM reservations
+    WHERE series_id = ${base.series_id}
+      AND status = 'confirmed'
+      AND starts_at >= ${base.starts_at}
+    ORDER BY starts_at
+  `;
+  if (targets.length === 0) throw new ValidationError("수정할 회차가 없습니다.", 404);
+
+  const planned = targets.map((row) => {
+    const day = partsInZone(new Date(row.starts_at));
+    const startsAt = startClock
+      ? zonedTime(day.year, day.month, day.day, startClock.hour, startClock.minute)
+      : new Date(row.starts_at);
+    const endsAt = endClock
+      ? zonedTime(day.year, day.month, day.day, endClock.hour, endClock.minute)
+      : new Date(row.ends_at);
+    validateTimes(startsAt, endsAt);
+    return { id: row.id, startsAt, endsAt };
+  });
+
+  const ids = planned.map((p) => p.id);
+
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${base.room_id})`;
+
+    const conflicts: SeriesConflict[] = [];
+    for (const item of planned) {
+      // 함께 옮겨지는 회차들은 검사에서 제외한다
+      const [hit] = await tx<{ lab: string; participants: string | null }[]>`
+        SELECT lab, participants FROM reservations
+        WHERE room_id = ${base.room_id}
+          AND status = 'confirmed'
+          AND id <> ALL(${ids})
+          AND starts_at < ${item.endsAt}
+          AND ends_at > ${item.startsAt}
+        LIMIT 1
+      `;
+      if (hit) {
+        conflicts.push({
+          startsAt: item.startsAt.toISOString(),
+          endsAt: item.endsAt.toISOString(),
+          conflictWith: reservationLabel(hit),
+        });
+      }
+    }
+
+    if (conflicts.length > 0) {
+      throw new ValidationError(
+        `${conflicts.length}개 회차가 기존 예약과 겹쳐 수정할 수 없습니다.`,
+        409,
+        { conflicts, total: planned.length },
+      );
+    }
+
+    for (const item of planned) {
+      await tx`
+        UPDATE reservations SET
+          lab          = ${input.lab ?? base.lab},
+          participants = ${input.participants === undefined ? base.participants : input.participants},
+          starts_at    = ${item.startsAt},
+          ends_at      = ${item.endsAt},
+          updated_at   = now()
+        WHERE id = ${item.id}
+      `;
+    }
+  });
+
+  invalidateReservationCache();
+  return { updated: planned.length };
 }
 
 export async function cancelReservation(id: number): Promise<void> {
