@@ -44,6 +44,43 @@ const POLL_STOP_AFTER_MS = 4 * 60 * 60_000;
 type View = "week" | "month";
 type Selection = { dayKey: string; from: number; to: number };
 
+/** 기존 예약을 끌어 옮기거나 위아래로 늘이는 중의 상태 */
+type BlockDrag = {
+  id: number;
+  mode: "move" | "start" | "end";
+  origin: { dayKey: string; from: number; to: number };
+  dayKey: string;
+  from: number;
+  to: number;
+  /** move 일 때, 블록 안 어디를 잡았는지 (슬롯 단위) */
+  grabOffset: number;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+/** 화면 좌표가 어느 날짜 칸의 몇 번째 슬롯인지 */
+function slotFromPoint(x: number, y: number): { dayKey: string; slot: number } | null {
+  const element = document.elementFromPoint(x, y) as HTMLElement | null;
+  const column = element?.closest<HTMLElement>("[data-day]");
+  if (!column?.dataset.day) return null;
+  const rect = column.getBoundingClientRect();
+  return {
+    dayKey: column.dataset.day,
+    slot: clamp(Math.floor((y - rect.top) / SLOT_PX), 0, SLOTS_PER_DAY - 1),
+  };
+}
+
+/** 예약의 시작/끝을 슬롯 번호로 */
+function slotRange(reservation: Reservation): { dayKey: string; from: number; to: number } {
+  const startsAt = new Date(reservation.starts_at);
+  const dayKey = dateKey(startsAt);
+  const open = dayStart(dayKey);
+  const toSlot = (date: Date) =>
+    Math.round((minutesBetween(open, date) - OPEN_HOUR * 60) / SLOT_MINUTES);
+  return { dayKey, from: toSlot(startsAt), to: toSlot(new Date(reservation.ends_at)) };
+}
+
 type Props = {
   rooms: Room[];
   currentEmail: string;
@@ -85,12 +122,14 @@ export default function Calendar({
   const isNarrow = useIsNarrow();
   const [selectedDay, setSelectedDay] = useState(initialToday);
   const [notice, setNotice] = useState<string | null>(null);
+  const [blockDrag, setBlockDrag] = useState<BlockDrag | null>(null);
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const loadedAtRef = useRef(Date.now());
 
   const dragging = useRef(false);
   const loadRef = useRef<(options?: { silent?: boolean; fresh?: boolean }) => void>(() => {});
   const lastInteractionRef = useRef(Date.now());
+  const blockDragRef = useRef<BlockDrag | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(
@@ -276,7 +315,118 @@ export default function Calendar({
     });
   }
 
+  /** 기존 예약 위에서 끌기 시작 (마우스만, 본인/관리자 예약만) */
+  function beginBlockDrag(
+    reservation: Reservation,
+    mode: BlockDrag["mode"],
+    event: React.PointerEvent,
+  ) {
+    if (event.pointerType !== "mouse") return;
+    if (!(isAdmin || reservation.user_email === currentEmail)) return;
+    // preventDefault 를 부르면 브라우저가 click 을 억제해 상세 창이 안 열린다.
+    // 텍스트 선택은 그리드의 no-select 클래스가 막아 준다.
+
+    const origin = slotRange(reservation);
+    const hit = slotFromPoint(event.clientX, event.clientY);
+    const next: BlockDrag = {
+      id: reservation.id,
+      mode,
+      origin,
+      dayKey: origin.dayKey,
+      from: origin.from,
+      to: origin.to,
+      grabOffset: (hit?.slot ?? origin.from) - origin.from,
+    };
+    blockDragRef.current = next;
+    setBlockDrag(next);
+  }
+
+  /** 끌기를 마치고 서버에 반영 */
+  const commitBlockDrag = useCallback(async (drag: BlockDrag) => {
+    const startsAt = slotTime(drag.dayKey, drag.from);
+    const endsAt = slotTime(drag.dayKey, drag.to);
+    if (startsAt <= new Date()) {
+      setNotice("이미 지난 시간으로는 옮길 수 없습니다.");
+      return;
+    }
+
+    // 먼저 화면에 반영하고, 실패하면 다시 불러와 되돌린다
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === drag.id
+          ? { ...item, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }
+          : item,
+      ),
+    );
+
+    try {
+      const response = await fetch(`/api/reservations/${drag.id}?scope=single`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setNotice(data.error ?? "예약을 옮기지 못했습니다.");
+      }
+    } catch {
+      setNotice("네트워크 오류로 옮기지 못했습니다.");
+    }
+    void loadRef.current({ silent: true, fresh: true });
+  }, []);
+
+  useEffect(() => {
+    function onMove(event: PointerEvent) {
+      const drag = blockDragRef.current;
+      if (!drag) return;
+      const hit = slotFromPoint(event.clientX, event.clientY);
+      if (!hit) return;
+
+      let next: BlockDrag;
+      if (drag.mode === "move") {
+        const length = drag.origin.to - drag.origin.from;
+        const from = clamp(hit.slot - drag.grabOffset, 0, SLOTS_PER_DAY - length);
+        next = { ...drag, dayKey: hit.dayKey, from, to: from + length };
+      } else if (drag.mode === "end") {
+        next = { ...drag, to: clamp(hit.slot + 1, drag.from + 1, SLOTS_PER_DAY) };
+      } else {
+        next = { ...drag, from: clamp(hit.slot, 0, drag.to - 1) };
+      }
+
+      if (next.dayKey !== drag.dayKey || next.from !== drag.from || next.to !== drag.to) {
+        blockDragRef.current = next;
+        setBlockDrag(next);
+      }
+    }
+
+    function onUp() {
+      const drag = blockDragRef.current;
+      if (!drag) return;
+      blockDragRef.current = null;
+      setBlockDrag(null);
+      const moved =
+        drag.dayKey !== drag.origin.dayKey ||
+        drag.from !== drag.origin.from ||
+        drag.to !== drag.origin.to;
+      // 움직이지 않았으면 클릭으로 보고 상세 창이 열리도록 둔다
+      if (moved) void commitBlockDrag(drag);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [commitBlockDrag]);
+
   function startDrag(dayKey: string, slot: number) {
+    if (blockDragRef.current) return; // 예약 블록을 끄는 중이면 빈 칸 선택을 시작하지 않는다
     if (slotTime(dayKey, slot + 1) <= new Date()) return; // 지난 시간은 선택 불가
     dragging.current = true;
     setSelection({ dayKey, from: slot, to: slot + DEFAULT_DURATION_SLOTS - 1 });
@@ -528,6 +678,14 @@ export default function Calendar({
                     onExtendDrag={extendDrag}
                     onTapSlot={tapSlot}
                     onOpenDetail={setDetail}
+                    canEdit={(item) => isAdmin || item.user_email === currentEmail}
+                    onBlockPointerDown={beginBlockDrag}
+                    blockPreview={
+                      blockDrag && blockDrag.dayKey === day
+                        ? { from: blockDrag.from, to: blockDrag.to }
+                        : null
+                    }
+                    draggingId={blockDrag?.id ?? null}
                   />
                 ))}
               </div>
@@ -552,7 +710,7 @@ export default function Calendar({
 
       <p className="text-xs text-muted">
         {view === "week"
-          ? "빈 시간대를 클릭하거나 드래그하면 예약 창이 열립니다. 예약 블록을 클릭하면 상세 정보를 볼 수 있습니다."
+          ? "빈 시간대를 클릭하거나 드래그하면 예약 창이 열립니다. 내 예약은 끌어서 옮기고, 위아래 모서리를 끌어 길이를 바꿀 수 있습니다."
           : "날짜 칸의 빈 곳을 누르면 그날 예약을 만들고, 날짜 숫자를 누르면 그 주의 주간 보기로 이동합니다."}
       </p>
 
@@ -632,6 +790,10 @@ function DayColumn({
   onExtendDrag,
   onTapSlot,
   onOpenDetail,
+  canEdit,
+  onBlockPointerDown,
+  blockPreview,
+  draggingId,
 }: {
   dayKey: string;
   isToday: boolean;
@@ -643,6 +805,16 @@ function DayColumn({
   onExtendDrag: (dayKey: string, slot: number) => void;
   onTapSlot: (dayKey: string, slot: number) => void;
   onOpenDetail: (reservation: Reservation) => void;
+  canEdit: (reservation: Reservation) => boolean;
+  onBlockPointerDown: (
+    reservation: Reservation,
+    mode: BlockDrag["mode"],
+    event: React.PointerEvent,
+  ) => void;
+  /** 이 칸에 그릴 끌기 미리보기 */
+  blockPreview: { from: number; to: number } | null;
+  /** 끌고 있는 예약의 id (원래 자리는 흐리게 표시) */
+  draggingId: number | null;
 }) {
   const open = dayStart(dayKey);
   const weekday = partsInZone(open).weekday;
@@ -651,6 +823,7 @@ function DayColumn({
 
   return (
     <div
+      data-day={dayKey}
       className={`relative border-l border-line ${weekendCell(weekday, "soft")}`}
       style={{ height: GRID_HEIGHT }}
     >
@@ -706,6 +879,16 @@ function DayColumn({
         />
       ) : null}
 
+      {blockPreview ? (
+        <div
+          className="pointer-events-none absolute inset-x-1 z-10 rounded-md border-2 border-dashed border-blue-600 bg-blue-500/25"
+          style={{
+            top: blockPreview.from * SLOT_PX,
+            height: (blockPreview.to - blockPreview.from) * SLOT_PX,
+          }}
+        />
+      ) : null}
+
       {reservations.map((reservation) => {
         const startsAt = new Date(reservation.starts_at);
         const endsAt = new Date(reservation.ends_at);
@@ -716,16 +899,23 @@ function DayColumn({
         const mine = reservation.user_email === currentEmail;
         // 내 예약은 바깥 링이 붙어 있으므로 조금 더 안쪽으로 그려 이웃 일정을 덜 침범한다
         const inset = mine ? 3 : 1;
+        const editable = canEdit(reservation);
+        const beingDragged = draggingId === reservation.id;
 
         return (
           <button
             key={reservation.id}
             type="button"
-            onPointerDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              if (editable) onBlockPointerDown(reservation, "move", event);
+            }}
             onClick={() => onOpenDetail(reservation)}
             title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
             className={`absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
               mine ? "mine" : "shadow-sm"
+            } ${editable ? "cursor-grab active:cursor-grabbing" : ""} ${
+              beingDragged ? "opacity-40" : ""
             }`}
             style={{
               top: top + inset,
@@ -738,6 +928,26 @@ function DayColumn({
               {reservation.series_id ? <span className="ml-1 opacity-80">↻</span> : null}
             </span>
             <span className="block truncate opacity-90">{reservationLabel(reservation)}</span>
+
+            {/* 위아래 모서리를 끌면 길이만 바뀐다 */}
+            {editable ? (
+              <>
+                <span
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onBlockPointerDown(reservation, "start", event);
+                  }}
+                  className="absolute inset-x-0 top-0 h-2 cursor-ns-resize"
+                />
+                <span
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onBlockPointerDown(reservation, "end", event);
+                  }}
+                  className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
+                />
+              </>
+            ) : null}
           </button>
         );
       })}
