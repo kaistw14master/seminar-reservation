@@ -34,26 +34,7 @@ export async function PATCH(request: Request, { params }: Context) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Context) {
-  try {
-    await requireAdmin();
-    const id = Number((await params).id);
-    if (!Number.isInteger(id)) throw new ValidationError("잘못된 요청입니다.");
-
-    const [upcoming] = await sql<{ count: number }[]>`
-      SELECT count(*)::int AS count FROM reservations
-      WHERE room_id = ${id} AND status = 'confirmed' AND ends_at > now()
-    `;
-    if (upcoming.count > 0) {
-      throw new ValidationError(
-        `앞으로 예정된 예약이 ${upcoming.count}건 있어 삭제할 수 없습니다. 대신 "사용 중지"를 사용하세요.`,
-        409,
-      );
-    }
-
-    await sql`DELETE FROM rooms WHERE id = ${id}`;
-    return Response.json({ ok: true });
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
+// 세미나실 삭제는 제공하지 않는다.
+// rooms 를 지우면 reservations 가 ON DELETE CASCADE 로 함께 사라지는데,
+// 실제로 방을 지울 일은 없고 실수했을 때 되돌릴 수 없다.
+// 방을 막아야 하면 PATCH 로 active 를 false 로 만든다.

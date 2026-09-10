@@ -63,14 +63,8 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
     setRooms((current) => current.map((room) => (room.id === id ? (data.room as Room) : room)));
   }
 
-  async function remove(id: number, name: string) {
-    if (!window.confirm(`"${name}" 세미나실을 삭제할까요? 지난 예약 기록도 함께 삭제됩니다.`)) {
-      return;
-    }
-    const data = await request(`/api/rooms/${id}`, "DELETE");
-    if (!data) return;
-    setRooms((current) => current.filter((room) => room.id !== id));
-  }
+  // 세미나실 삭제는 지난 예약까지 함께 지워지는 데 비해 쓸 일이 없어 제공하지 않는다.
+  // 방을 막아야 하면 "사용"을 꺼서 예약 화면에서 숨긴다 (되돌릴 수 있다).
 
   return (
     <div className="space-y-6">
@@ -100,7 +94,10 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
                 </p>
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-muted">
+              <label
+                className="flex items-center gap-2 text-xs text-muted"
+                title="끄면 예약 화면에서 숨겨지고 새 예약을 받지 않습니다. 기존 예약은 그대로 남습니다."
+              >
                 <input
                   type="checkbox"
                   checked={room.active}
@@ -109,15 +106,6 @@ export default function AdminRooms({ initial }: { initial: Room[] }) {
                 />
                 사용
               </label>
-
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => remove(room.id, room.name)}
-                className="rounded-md border border-red-300 px-2.5 py-1.5 text-xs text-red-600 transition hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:hover:bg-red-950"
-              >
-                삭제
-              </button>
             </div>
 
           </li>
