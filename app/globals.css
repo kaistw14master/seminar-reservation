@@ -104,20 +104,29 @@ body {
   background-color: rgba(59, 130, 246, 0.12);
 }
 
-/* 내 예약 강조: 에메랄드(초록 쪽 청록) 링.
-   순청록보다 파랑에서 멀어 SBML 블록 위에서도 구분된다. */
+/* 내 예약 강조.
+   연구실 색(파랑·주황)이 채도가 높아 링을 블록에 바로 붙이면 묻힌다.
+   배경색 간격을 한 겹 두어 링을 블록에서 떼어 놓는다. */
 .mine {
-  box-shadow: 0 0 0 3px #059669;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px #059669;
 }
 .mine-dot {
-  box-shadow: 0 0 0 2px #059669;
+  box-shadow:
+    0 0 0 1px var(--surface),
+    0 0 0 3px #059669;
 }
 
 @media (prefers-color-scheme: dark) {
   .mine {
-    box-shadow: 0 0 0 3px #34d399;
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 0 0 4px #34d399;
   }
   .mine-dot {
-    box-shadow: 0 0 0 2px #34d399;
+    box-shadow:
+      0 0 0 1px var(--surface),
+      0 0 0 3px #34d399;
   }
 }
