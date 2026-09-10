@@ -107,10 +107,10 @@ body {
 /* 내 예약 강조: 에메랄드(초록 쪽 청록) 링.
    순청록보다 파랑에서 멀어 SBML 블록 위에서도 구분된다. */
 .mine {
-  box-shadow: 0 0 0 3px #10b981;
+  box-shadow: 0 0 0 3px #059669;
 }
 .mine-dot {
-  box-shadow: 0 0 0 2px #10b981;
+  box-shadow: 0 0 0 2px #059669;
 }
 
 @media (prefers-color-scheme: dark) {
