@@ -104,20 +104,20 @@ body {
   background-color: rgba(59, 130, 246, 0.12);
 }
 
-/* 내 예약 강조: 연구실 색(파랑·주황)과 색상이 확실히 다른 분홍 링.
-   초록은 예약 시스템에서 "비어 있음"으로 읽힐 여지가 있어 피했다. */
+/* 내 예약 강조: 청록 링. SBML 파랑과 색상이 인접하므로 밝기로 구분되도록
+   밝은 톤을 쓴다. */
 .mine {
-  box-shadow: 0 0 0 3px #ec4899;
+  box-shadow: 0 0 0 3px #06b6d4;
 }
 .mine-dot {
-  box-shadow: 0 0 0 2px #ec4899;
+  box-shadow: 0 0 0 2px #06b6d4;
 }
 
 @media (prefers-color-scheme: dark) {
   .mine {
-    box-shadow: 0 0 0 3px #f472b6;
+    box-shadow: 0 0 0 3px #22d3ee;
   }
   .mine-dot {
-    box-shadow: 0 0 0 2px #f472b6;
+    box-shadow: 0 0 0 2px #22d3ee;
   }
 }
