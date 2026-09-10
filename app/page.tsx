@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import Calendar from "@/components/Calendar";
 import { addMinutes, dateKey, dayStart, monthKeyOf, weekDayKeys, weekStartKey } from "@/lib/time";
-import { listReservations } from "@/lib/reservations";
+import { listReservationsCached } from "@/lib/reservations";
 import type { Room } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function HomePage() {
 
   // 첫 화면에 필요한 예약을 서버에서 함께 내려보내 브라우저의 추가 요청을 없앤다
   const days = weekDayKeys(initialWeek);
-  const initialReservations = await listReservations({
+  const initialReservations = await listReservationsCached({
     from: dayStart(days[0]),
     to: addMinutes(dayStart(days[6]), 24 * 60),
     roomId: rooms[0].id,

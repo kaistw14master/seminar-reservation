@@ -33,6 +33,14 @@ const DEFAULT_DURATION_SLOTS = Math.max(1, Math.round(60 / SLOT_MINUTES));
 /** 하루 전체를 그리면 세로가 길어지므로, 처음엔 이 시각이 보이도록 스크롤한다 */
 const INITIAL_SCROLL_HOUR = 9;
 
+// 자동 갱신 정책: 마지막 상호작용으로부터 얼마나 지났는지로 주기를 정한다.
+// 화면이 가려져 있으면 아예 쉬고, 오래 방치되면 멈춰서 DB 가 절전하도록 둔다.
+const POLL_CHECK_MS = 30_000;
+const POLL_ACTIVE_MS = 60_000; // 최근에 만졌을 때
+const POLL_IDLE_MS = 5 * 60_000; // 띄워만 두고 안 만질 때 (분할 화면 등)
+const ACTIVE_WINDOW_MS = 10 * 60_000;
+const POLL_STOP_AFTER_MS = 4 * 60 * 60_000;
+
 type View = "week" | "month";
 type Selection = { dayKey: string; from: number; to: number };
 
@@ -77,8 +85,12 @@ export default function Calendar({
   const isNarrow = useIsNarrow();
   const [selectedDay, setSelectedDay] = useState(initialToday);
   const [notice, setNotice] = useState<string | null>(null);
+  const [loadedAt, setLoadedAt] = useState(() => Date.now());
+  const loadedAtRef = useRef(Date.now());
 
   const dragging = useRef(false);
+  const loadRef = useRef<(options?: { silent?: boolean; fresh?: boolean }) => void>(() => {});
+  const lastInteractionRef = useRef(Date.now());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(
@@ -104,25 +116,34 @@ export default function Calendar({
     scrollRef.current.scrollTop = Math.max(0, offset * SLOT_PX);
   }, [view, isNarrow]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    const from = dayStart(days[0]);
-    const to = addMinutes(dayStart(days[days.length - 1]), 24 * 60);
-    try {
-      const response = await fetch(
-        `/api/reservations?from=${from.toISOString()}&to=${to.toISOString()}&roomId=${roomId}`,
-        { cache: "no-store" },
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "불러오기 실패");
-      setReservations(data.reservations as Reservation[]);
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "예약을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [days, roomId]);
+  /**
+   * options.silent : 배경 갱신이라 로딩 표시를 띄우지 않는다
+   * options.fresh  : 서버 캐시를 건너뛴다 (예약 직후처럼 최신이 확실해야 할 때)
+   */
+  const load = useCallback(
+    async (options: { silent?: boolean; fresh?: boolean } = {}) => {
+      if (!options.silent) setLoading(true);
+      setLoadError(null);
+      const from = dayStart(days[0]);
+      const to = addMinutes(dayStart(days[days.length - 1]), 24 * 60);
+      try {
+        const response = await fetch(
+          `/api/reservations?from=${from.toISOString()}&to=${to.toISOString()}&roomId=${roomId}` +
+            (options.fresh ? "&fresh=1" : ""),
+          { cache: "no-store" },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "불러오기 실패");
+        setReservations(data.reservations as Reservation[]);
+        setLoadedAt(Date.now());
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "예약을 불러오지 못했습니다.");
+      } finally {
+        if (!options.silent) setLoading(false);
+      }
+    },
+    [days, roomId],
+  );
 
   // 첫 렌더는 서버가 내려준 데이터를 그대로 쓰고, 주/월/방이 바뀔 때부터 다시 불러온다
   const skipFirstLoad = useRef(true);
@@ -133,6 +154,44 @@ export default function Calendar({
     }
     void load();
   }, [load]);
+
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  // 다른 사람이 만든 예약을 화면에 반영한다 (부하를 줄이려고 상황에 따라 주기를 바꾼다)
+  useEffect(() => {
+    const touch = () => {
+      lastInteractionRef.current = Date.now();
+    };
+    const events = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+    for (const type of events) window.addEventListener(type, touch, { passive: true });
+
+    const refreshNow = () => {
+      touch();
+      loadRef.current({ silent: true });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshNow();
+    };
+    window.addEventListener("focus", refreshNow);
+    document.addEventListener("visibilitychange", onVisible);
+
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const idle = Date.now() - lastInteractionRef.current;
+      if (idle > POLL_STOP_AFTER_MS) return;
+      const wanted = idle <= ACTIVE_WINDOW_MS ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+      if (Date.now() - loadedAtRef.current >= wanted) loadRef.current({ silent: true });
+    }, POLL_CHECK_MS);
+
+    return () => {
+      for (const type of events) window.removeEventListener(type, touch);
+      window.removeEventListener("focus", refreshNow);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, []);
 
   // 드래그로 시간 범위를 선택한 뒤 손을 떼면 예약 창을 연다
   useEffect(() => {
@@ -233,6 +292,9 @@ export default function Calendar({
   const shownDays = view === "week" && isNarrow ? [selectedDay] : days;
   const gridCols = isNarrow ? "grid-cols-[46px_1fr]" : "grid-cols-[56px_repeat(7,1fr)]";
 
+  // nowMs 가 1분마다 갱신되므로 이 값도 함께 다시 계산된다
+  const staleMinutes = nowMs > 0 ? Math.floor((nowMs - loadedAt) / 60_000) : 0;
+
   const rangeLabel =
     view === "week"
       ? `${weekKey.replace(/-/g, ".")} ~ ${days[6].slice(5).replace(/-/g, ".")}`
@@ -284,7 +346,18 @@ export default function Calendar({
           </span>
         ) : null}
 
-        {loading ? <span className="text-xs text-muted">불러오는 중…</span> : null}
+        {loading ? (
+          <span className="text-xs text-muted">불러오는 중…</span>
+        ) : staleMinutes >= 2 ? (
+          <button
+            type="button"
+            onClick={() => void load({ fresh: true })}
+            title="눌러서 지금 새로고침"
+            className="text-xs text-muted underline underline-offset-2"
+          >
+            {staleMinutes}분 전 기준
+          </button>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2">
           <button
@@ -498,7 +571,7 @@ export default function Calendar({
                 : null,
             );
             if (saved.room_id !== roomId) setRoomId(saved.room_id);
-            else void load();
+            else void load({ fresh: true });
           }}
         />
       ) : null}

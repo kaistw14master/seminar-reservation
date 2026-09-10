@@ -91,6 +91,44 @@ export async function listReservations(options: {
   `;
 }
 
+/**
+ * 예약 목록 캐시.
+ * 목록 내용은 보는 사람과 무관하게 같으므로, 여러 명이 동시에 폴링해도
+ * DB 조회 횟수가 사람 수에 비례하지 않도록 짧게 캐시한다.
+ */
+type CacheEntry = { data: Reservation[]; expiresAt: number };
+const listCache = new Map<string, CacheEntry>();
+const LIST_CACHE_MS = 20_000;
+
+/** 예약이 바뀌면 캐시를 버린다 (같은 인스턴스 한정이라 완전하지는 않다) */
+export function invalidateReservationCache(): void {
+  listCache.clear();
+}
+
+export async function listReservationsCached(options: {
+  from: Date;
+  to: Date;
+  roomId?: number;
+  /** true 면 캐시를 건너뛴다 (예약 직후처럼 최신이 확실히 필요할 때) */
+  fresh?: boolean;
+}): Promise<Reservation[]> {
+  const key = `${options.roomId ?? "all"}|${options.from.toISOString()}|${options.to.toISOString()}`;
+  const now = Date.now();
+
+  if (!options.fresh) {
+    const hit = listCache.get(key);
+    if (hit && hit.expiresAt > now) return hit.data;
+  }
+
+  const data = await listReservations(options);
+  listCache.set(key, { data, expiresAt: now + LIST_CACHE_MS });
+
+  if (listCache.size > 50) {
+    for (const [k, entry] of listCache) if (entry.expiresAt <= now) listCache.delete(k);
+  }
+  return data;
+}
+
 export async function listUserReservations(email: string): Promise<Reservation[]> {
   return sql<Reservation[]>`
     SELECT ${reservationColumns()}
@@ -162,6 +200,7 @@ export async function createReservation(input: CreateInput): Promise<Reservation
     return row;
   });
 
+  invalidateReservationCache();
   return (await getReservation(created.id))!;
 }
 
@@ -269,6 +308,7 @@ export async function createReservationSeries(
   const created = (await Promise.all(ids.map((id) => getReservation(id)))).filter(
     (r): r is Reservation => Boolean(r),
   );
+  invalidateReservationCache();
   return { created, skipped };
 }
 
@@ -317,6 +357,7 @@ export async function updateReservation(
     `;
   });
 
+  invalidateReservationCache();
   return (await getReservation(id))!;
 }
 
@@ -325,6 +366,7 @@ export async function cancelReservation(id: number): Promise<void> {
   if (!existing) throw new ValidationError("예약을 찾을 수 없습니다.", 404);
 
   await sql`UPDATE reservations SET status = 'cancelled', updated_at = now() WHERE id = ${id}`;
+  invalidateReservationCache();
 
 }
 

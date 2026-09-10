@@ -2,7 +2,7 @@ import {
   ValidationError,
   createReservation,
   createReservationSeries,
-  listReservations,
+  listReservationsCached,
   listUserReservations,
   validateTimes,
 } from "@/lib/reservations";
@@ -36,7 +36,12 @@ export async function GET(request: Request) {
     const roomId = roomIdParam ? Number(roomIdParam) : undefined;
 
     return Response.json({
-      reservations: await listReservations({ from, to, roomId }),
+      reservations: await listReservationsCached({
+        from,
+        to,
+        roomId,
+        fresh: params.get("fresh") === "1",
+      }),
     });
   } catch (error) {
     return errorResponse(error);
