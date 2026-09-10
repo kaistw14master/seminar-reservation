@@ -2,7 +2,17 @@
 
 import { useMemo, useState } from "react";
 import Modal from "./Modal";
-import { dateKey, dateKeyOfDayStart, formatDateKey, fromLocalInput, partsInZone, toLocalInput } from "@/lib/time";
+import {
+  addMinutes,
+  dateKey,
+  dateKeyOfDayStart,
+  formatDateKey,
+  fromLocalInput,
+  minutesBetween,
+  partsInZone,
+  toLocalInput,
+  zonedTime,
+} from "@/lib/time";
 import { CLOSE_HOUR, OPEN_HOUR, SLOT_MINUTES } from "@/lib/hours";
 import {
   MAX_OCCURRENCES,
@@ -98,6 +108,41 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
     setStart(`${value}T${startTime}`);
     setEnd(`${value}T${endTime}`); // 하루를 넘기는 예약은 허용하지 않는다
     if (until < value) setUntil(dateKeyOfDayStart(value, 56));
+  }
+
+  /**
+   * 시작을 옮기면 길이를 유지한 채 종료도 함께 옮긴다.
+   * 자정을 넘기는 예약은 만들 수 없으므로 그럴 땐 그 날의 마지막 슬롯으로 맞춘다.
+   */
+  function changeStart(nextStart: string) {
+    setStart(nextStart);
+    const moved = fromLocalInput(nextStart);
+    if (Number.isNaN(moved.getTime())) return;
+
+    const previousStart = fromLocalInput(start);
+    const previousEnd = fromLocalInput(end);
+    const duration =
+      Number.isNaN(previousStart.getTime()) || Number.isNaN(previousEnd.getTime())
+        ? SLOT_MINUTES
+        : Math.max(SLOT_MINUTES, minutesBetween(previousStart, previousEnd));
+
+    let nextEnd = addMinutes(moved, duration);
+    if (dateKey(nextEnd) !== dateKey(moved)) {
+      const day = partsInZone(moved);
+      nextEnd = zonedTime(day.year, day.month, day.day, 23, 60 - SLOT_MINUTES);
+    }
+    setEnd(toLocalInput(nextEnd));
+  }
+
+  /** 종료만 바꾸면 길이가 바뀐다. 시작보다 앞서면 한 칸 뒤로 되돌린다. */
+  function changeEnd(nextEnd: string) {
+    const startAt = fromLocalInput(start);
+    const endAt = fromLocalInput(nextEnd);
+    if (!Number.isNaN(startAt.getTime()) && !Number.isNaN(endAt.getTime()) && endAt <= startAt) {
+      setEnd(toLocalInput(addMinutes(startAt, SLOT_MINUTES)));
+      return;
+    }
+    setEnd(nextEnd);
   }
 
   function toggleWeekday(day: number) {
@@ -251,7 +296,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                 required
                 step={SLOT_MINUTES * 60}
                 value={startTime}
-                onChange={(event) => setStart(`${startDate}T${event.target.value}`)}
+                onChange={(event) => changeStart(`${startDate}T${event.target.value}`)}
                 className={inputClass}
               />
             </div>
@@ -262,7 +307,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                 required
                 step={SLOT_MINUTES * 60}
                 value={endTime}
-                onChange={(event) => setEnd(`${startDate}T${event.target.value}`)}
+                onChange={(event) => changeEnd(`${startDate}T${event.target.value}`)}
                 className={inputClass}
               />
             </div>
@@ -276,7 +321,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                 required
                 step={SLOT_MINUTES * 60}
                 value={start}
-                onChange={(event) => setStart(event.target.value)}
+                onChange={(event) => changeStart(event.target.value)}
                 className={inputClass}
               />
             </div>
@@ -287,7 +332,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
                 required
                 step={SLOT_MINUTES * 60}
                 value={end}
-                onChange={(event) => setEnd(event.target.value)}
+                onChange={(event) => changeEnd(event.target.value)}
                 className={inputClass}
               />
             </div>
