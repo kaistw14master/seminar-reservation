@@ -10,6 +10,7 @@ import {
   fromLocalInput,
   minutesBetween,
   partsInZone,
+  timeLabel,
   toLocalInput,
   zonedTime,
 } from "@/lib/time";
@@ -250,7 +251,10 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
               <span className="font-medium text-ink">
                 {formatDateKey(dateKey(new Date(conflict.startsAt)))}
               </span>
-              <span>→ &ldquo;{conflict.conflictWith}&rdquo;</span>
+              <span>
+                {timeLabel(new Date(conflict.startsAt))}–{timeLabel(new Date(conflict.endsAt))}
+              </span>
+              <span>{conflict.conflictWith}</span>
             </li>
           ))}
         </ul>

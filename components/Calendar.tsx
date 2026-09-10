@@ -56,6 +56,9 @@ type BlockDrag = {
   grabOffset: number;
 };
 
+/** 월간 보기에서 예약을 다른 날짜로 끄는 중의 상태 */
+type MonthDrag = { id: number; originDay: string; dayKey: string };
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
@@ -123,13 +126,18 @@ export default function Calendar({
   const [selectedDay, setSelectedDay] = useState(initialToday);
   const [notice, setNotice] = useState<string | null>(null);
   const [blockDrag, setBlockDrag] = useState<BlockDrag | null>(null);
+  const [monthDrag, setMonthDrag] = useState<MonthDrag | null>(null);
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const loadedAtRef = useRef(Date.now());
+  const reservationsRef = useRef(reservations);
 
   const dragging = useRef(false);
   const loadRef = useRef<(options?: { silent?: boolean; fresh?: boolean }) => void>(() => {});
   const lastInteractionRef = useRef(Date.now());
   const blockDragRef = useRef<BlockDrag | null>(null);
+  const monthDragRef = useRef<MonthDrag | null>(null);
+  // 끌기가 끝난 직후에 이어지는 click 은 상세 창을 열지 않는다
+  const suppressClickRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(
@@ -194,9 +202,11 @@ export default function Calendar({
     void load();
   }, [load]);
 
+  // 전역 포인터 핸들러에서 최신 값을 읽기 위한 사본
   useEffect(() => {
     loadRef.current = load;
-  }, [load]);
+    reservationsRef.current = reservations;
+  });
 
   // 다른 사람이 만든 예약을 화면에 반영한다 (부하를 줄이려고 상황에 따라 주기를 바꾼다)
   useEffect(() => {
@@ -337,8 +347,29 @@ export default function Calendar({
       to: origin.to,
       grabOffset: (hit?.slot ?? origin.from) - origin.from,
     };
+    suppressClickRef.current = false;
     blockDragRef.current = next;
     setBlockDrag(next);
+  }
+
+  /** 월간 보기에서 예약을 다른 날짜로 끌기 시작 */
+  function beginMonthDrag(reservation: Reservation, event: React.PointerEvent) {
+    if (event.pointerType !== "mouse") return;
+    if (!(isAdmin || reservation.user_email === currentEmail)) return;
+    suppressClickRef.current = false;
+    const originDay = dateKey(new Date(reservation.starts_at));
+    const next: MonthDrag = { id: reservation.id, originDay, dayKey: originDay };
+    monthDragRef.current = next;
+    setMonthDrag(next);
+  }
+
+  /** 예약 블록을 눌렀을 때. 끌고 난 직후라면 상세를 열지 않는다. */
+  function openDetail(reservation: Reservation) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    setDetail(reservation);
   }
 
   /** 끌기를 마치고 서버에 반영 */
@@ -412,7 +443,10 @@ export default function Calendar({
         drag.from !== drag.origin.from ||
         drag.to !== drag.origin.to;
       // 움직이지 않았으면 클릭으로 보고 상세 창이 열리도록 둔다
-      if (moved) void commitBlockDrag(drag);
+      if (moved) {
+        suppressClickRef.current = true;
+        void commitBlockDrag(drag);
+      }
     }
 
     window.addEventListener("pointermove", onMove);
@@ -424,6 +458,81 @@ export default function Calendar({
       window.removeEventListener("pointercancel", onUp);
     };
   }, [commitBlockDrag]);
+
+  /** 월간 보기: 시각은 그대로 두고 날짜만 옮긴다 */
+  const commitMonthDrag = useCallback(async (drag: MonthDrag) => {
+    const moving = reservationsRef.current.find((item) => item.id === drag.id);
+    if (!moving) return;
+
+    const shift =
+      (dayStart(drag.dayKey).getTime() - dayStart(drag.originDay).getTime()) / 60_000;
+    const startsAt = addMinutes(new Date(moving.starts_at), shift);
+    const endsAt = addMinutes(new Date(moving.ends_at), shift);
+    if (startsAt <= new Date()) {
+      setNotice("이미 지난 날짜로는 옮길 수 없습니다.");
+      return;
+    }
+
+    setReservations((current) =>
+      current.map((item) =>
+        item.id === drag.id
+          ? { ...item, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }
+          : item,
+      ),
+    );
+
+    try {
+      const response = await fetch(`/api/reservations/${drag.id}?scope=single`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setNotice(data.error ?? "예약을 옮기지 못했습니다.");
+      }
+    } catch {
+      setNotice("네트워크 오류로 옮기지 못했습니다.");
+    }
+    void loadRef.current({ silent: true, fresh: true });
+  }, []);
+
+  useEffect(() => {
+    function onMove(event: PointerEvent) {
+      const drag = monthDragRef.current;
+      if (!drag) return;
+      const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      const cell = element?.closest<HTMLElement>("[data-month-day]");
+      const dayKey = cell?.dataset.monthDay;
+      if (!dayKey || dayKey === drag.dayKey) return;
+      const next = { ...drag, dayKey };
+      monthDragRef.current = next;
+      setMonthDrag(next);
+    }
+
+    function onUp() {
+      const drag = monthDragRef.current;
+      if (!drag) return;
+      monthDragRef.current = null;
+      setMonthDrag(null);
+      if (drag.dayKey !== drag.originDay) {
+        suppressClickRef.current = true;
+        void commitMonthDrag(drag);
+      }
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [commitMonthDrag]);
 
   function startDrag(dayKey: string, slot: number) {
     if (blockDragRef.current) return; // 예약 블록을 끄는 중이면 빈 칸 선택을 시작하지 않는다
@@ -677,7 +786,7 @@ export default function Calendar({
                     onStartDrag={startDrag}
                     onExtendDrag={extendDrag}
                     onTapSlot={tapSlot}
-                    onOpenDetail={setDetail}
+                    onOpenDetail={openDetail}
                     canEdit={(item) => isAdmin || item.user_email === currentEmail}
                     onBlockPointerDown={beginBlockDrag}
                     blockPreview={
@@ -702,9 +811,12 @@ export default function Calendar({
           nowMs={nowMs}
           compact={isNarrow}
           currentEmail={currentEmail}
-          onOpenDetail={setDetail}
+          onOpenDetail={openDetail}
           onCreateAt={createAt}
           onOpenWeek={openWeekOf}
+          canEdit={(item) => isAdmin || item.user_email === currentEmail}
+          onBlockPointerDown={beginMonthDrag}
+          drag={monthDrag ? { id: monthDrag.id, dayKey: monthDrag.dayKey } : null}
         />
       )}
 
@@ -928,27 +1040,43 @@ function DayColumn({
               {reservation.series_id ? <span className="ml-1 opacity-80">↻</span> : null}
             </span>
             <span className="block truncate opacity-90">{reservationLabel(reservation)}</span>
-
-            {/* 위아래 모서리를 끌면 길이만 바뀐다 */}
-            {editable ? (
-              <>
-                <span
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    onBlockPointerDown(reservation, "start", event);
-                  }}
-                  className="absolute inset-x-0 top-0 h-2 cursor-ns-resize"
-                />
-                <span
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    onBlockPointerDown(reservation, "end", event);
-                  }}
-                  className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
-                />
-              </>
-            ) : null}
           </button>
+        );
+      })}
+
+      {/*
+        길이 조절 손잡이는 블록 바깥에 따로 그린다.
+        블록 안에 두면 overflow 로 잘리고, 내 예약은 링이 블록 밖에 있어
+        눈에 보이는 모서리와 실제로 잡히는 위치가 어긋난다.
+      */}
+      {reservations.map((reservation) => {
+        if (!canEdit(reservation)) return null;
+        const startsAt = new Date(reservation.starts_at);
+        const endsAt = new Date(reservation.ends_at);
+        const startMinutes = minutesBetween(open, startsAt) - OPEN_HOUR * 60;
+        const top = Math.max(0, (startMinutes / SLOT_MINUTES) * SLOT_PX);
+        const rawHeight = (minutesBetween(startsAt, endsAt) / SLOT_MINUTES) * SLOT_PX;
+        const height = Math.max(SLOT_PX - 2, Math.min(rawHeight, GRID_HEIGHT - top));
+
+        return (
+          <div key={`handles-${reservation.id}`}>
+            <div
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onBlockPointerDown(reservation, "start", event);
+              }}
+              className="absolute inset-x-1 z-20 cursor-ns-resize"
+              style={{ top: top - 4, height: 9 }}
+            />
+            <div
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onBlockPointerDown(reservation, "end", event);
+              }}
+              className="absolute inset-x-1 z-20 cursor-ns-resize"
+              style={{ top: top + height - 5, height: 9 }}
+            />
+          </div>
         );
       })}
     </div>

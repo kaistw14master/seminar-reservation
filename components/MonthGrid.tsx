@@ -19,6 +19,10 @@ type Props = {
   onOpenDetail: (reservation: Reservation) => void;
   onCreateAt: (dayKey: string) => void;
   onOpenWeek: (dayKey: string) => void;
+  canEdit: (reservation: Reservation) => boolean;
+  onBlockPointerDown: (reservation: Reservation, event: React.PointerEvent) => void;
+  /** 끌고 있는 예약의 id 와 현재 대상 날짜 */
+  drag: { id: number; dayKey: string } | null;
 };
 
 export default function MonthGrid({
@@ -32,6 +36,9 @@ export default function MonthGrid({
   onOpenDetail,
   onCreateAt,
   onOpenWeek,
+  canEdit,
+  onBlockPointerDown,
+  drag,
 }: Props) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -66,6 +73,7 @@ export default function MonthGrid({
             return (
               <div
                 key={day}
+                data-month-day={day}
                 onClick={(event) => {
                   // 빈 영역을 눌렀을 때만 새 예약 창을 연다
                   if (isPast) return;
@@ -74,9 +82,9 @@ export default function MonthGrid({
                 title={isPast ? "지난 날짜에는 예약할 수 없습니다" : undefined}
                 className={`border-b border-l border-line transition ${
                   compact ? "min-h-[62px] p-1" : "min-h-[112px] p-1.5"
-                } ${isPast ? "slot-past" : "cell-hover cursor-pointer"} ${weekendCell(
-                  parts.weekday,
-                )} ${inMonth ? "" : "opacity-50"}`}
+                } ${isPast ? "slot-past" : "cell-hover cursor-pointer"} ${
+                  drag && drag.dayKey === day ? "ring-2 ring-inset ring-blue-500" : ""
+                } ${weekendCell(parts.weekday)} ${inMonth ? "" : "opacity-50"}`}
               >
                 <button
                   type="button"
@@ -99,6 +107,10 @@ export default function MonthGrid({
                       <button
                         key={reservation.id}
                         type="button"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          if (canEdit(reservation)) onBlockPointerDown(reservation, event);
+                        }}
                         onClick={() => onOpenDetail(reservation)}
                         title={`${timeLabel(new Date(reservation.starts_at))}–${timeLabel(
                           new Date(reservation.ends_at),
@@ -106,7 +118,7 @@ export default function MonthGrid({
                         aria-label={reservationLabel(reservation)}
                         className={`h-2 w-2 rounded-full ${
                           reservation.user_email === currentEmail ? "mine-dot" : ""
-                        }`}
+                        } ${drag?.id === reservation.id ? "opacity-40" : ""}`}
                         style={{ backgroundColor: labColor(reservation.lab) }}
                       />
                     ))}
@@ -119,10 +131,16 @@ export default function MonthGrid({
                       <button
                         key={reservation.id}
                         type="button"
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          if (canEdit(reservation)) onBlockPointerDown(reservation, event);
+                        }}
                         onClick={() => onOpenDetail(reservation)}
                         title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
                         className={`flex w-full items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
                           mine ? "mine" : ""
+                        } ${canEdit(reservation) ? "cursor-grab active:cursor-grabbing" : ""} ${
+                          drag?.id === reservation.id ? "opacity-40" : ""
                         }`}
                         style={{ backgroundColor: labColor(reservation.lab) }}
                       >
