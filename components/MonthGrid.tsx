@@ -94,7 +94,7 @@ export default function MonthGrid({
                 </button>
 
                 {compact ? (
-                  <div className="mt-0.5 flex flex-wrap gap-1">
+                  <div className="mt-0.5 flex flex-wrap gap-1.5">
                     {items.slice(0, 6).map((reservation) => (
                       <button
                         key={reservation.id}
@@ -121,8 +121,8 @@ export default function MonthGrid({
                         type="button"
                         onClick={() => onOpenDetail(reservation)}
                         title={`${reservationLabel(reservation)} · 예약자 ${reservation.user_name ?? reservation.user_email}`}
-                        className={`flex w-full items-center gap-1 overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
-                          mine ? "mine" : ""
+                        className={`flex w-full items-center gap-1 overflow-hidden rounded text-left text-[11px] leading-tight text-white transition hover:brightness-110 ${
+                          mine ? "mine-chip px-1.5 py-1" : "px-1 py-0.5"
                         }`}
                         style={{ backgroundColor: labColor(reservation.lab) }}
                       >
