@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import {
   addMinutes,
@@ -77,15 +77,44 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
 
   // 반복 설정
   const [repeat, setRepeat] = useState(false);
+  const [ruleLoaded, setRuleLoaded] = useState(false);
   const [intervalWeeks, setIntervalWeeks] = useState(1);
   const [weekdays, setWeekdays] = useState<number[]>([partsInZone(seed.startsAt).weekday]);
   const [until, setUntil] = useState(() => dateKeyOfDayStart(dateKey(seed.startsAt), 56));
 
   const rule: RecurrenceRule = { intervalWeeks, weekdays, until };
 
+  // 반복 예약을 "이후 전체" 로 고칠 때는 생성과 같은 반복 설정을 그대로 쓴다
+  const seriesEdit = isEdit && Boolean(seed.seriesId) && editScope === "following";
+  const showRecurrence = !isEdit || seriesEdit;
+  const useRecurrence = seriesEdit || (repeat && !isEdit);
+
+  // 기존 시리즈의 규칙을 불러와 기본값으로 채운다
+  useEffect(() => {
+    if (!seriesEdit || ruleLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/reservations/${seed.reservationId}`);
+        const data = await response.json();
+        if (cancelled || !data.rule) return;
+        setIntervalWeeks(data.rule.intervalWeeks);
+        setWeekdays(data.rule.weekdays);
+        setUntil(data.rule.until);
+      } catch {
+        // 실패하면 기본값 그대로 둔다
+      } finally {
+        if (!cancelled) setRuleLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seriesEdit, ruleLoaded, seed.reservationId]);
+
   // 미리보기: 규칙이 만들어낼 회차를 클라이언트에서도 똑같이 계산한다
   const preview = useMemo(() => {
-    if (!repeat) return null;
+    if (!repeat && !seriesEdit) return null;
     try {
       const occurrences = expandOccurrences(fromLocalInput(start), fromLocalInput(end), rule);
       return { occurrences, error: null as string | null };
@@ -96,7 +125,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repeat, start, end, intervalWeeks, weekdays.join(","), until]);
+  }, [repeat, seriesEdit, start, end, intervalWeeks, weekdays.join(","), until]);
 
   // 반복 모드에서는 "날짜 + 시각"을 따로 입력받아 datetime-local 값으로 합친다
   const startDate = start.slice(0, 10);
@@ -163,7 +192,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
       startsAt: fromLocalInput(start).toISOString(),
       endsAt: fromLocalInput(end).toISOString(),
     };
-    if (repeat && !isEdit) {
+    if (useRecurrence) {
       payload.recurrence = rule;
       payload.skipConflicts = skipConflicts;
     }
@@ -277,7 +306,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
           </select>
         </div>
 
-        {repeat ? (
+        {repeat || seriesEdit ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="col-span-2">
               <label className="mb-1 block text-sm font-medium">반복 시작 날짜</label>
@@ -410,14 +439,17 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
             </div>
             {editScope === "following" ? (
               <p className="mt-2 text-xs text-muted">
-이 회차를 옮긴 만큼 이후 회차도 함께 옮겨집니다 (예: 목요일 → 수요일로 바꾸면 이후도 모두 수요일). 한 회차라도 다른 예약과 겹치면 전체가 취소되고 겹친 날짜를 알려드립니다.
+이 회차부터 아래 설정대로 다시 만듭니다. 요일·주기·종료 날짜를 바꿀 수 있고, 이전 회차는 그대로 둡니다.
               </p>
             ) : null}
           </div>
         ) : null}
 
-        {!isEdit ? (
+        {showRecurrence ? (
           <div className="rounded-xl border border-line p-3">
+            {seriesEdit ? (
+              <p className="text-sm font-medium">반복 설정</p>
+            ) : (
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -431,8 +463,9 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
               />
               반복 예약
             </label>
+            )}
 
-            {repeat ? (
+            {repeat || seriesEdit ? (
               <div className="mt-3 space-y-3">
                 <div>
                   <label className="mb-1 block text-xs text-muted">반복 주기</label>

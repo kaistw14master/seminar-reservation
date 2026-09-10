@@ -506,3 +506,145 @@ export async function cancelSeries(
 
   return targets.length;
 }
+
+/**
+ * 반복 예약의 기준 회차 이후를 새 규칙으로 다시 만든다.
+ * 요일이 바뀌면 회차 날짜 자체가 달라지므로, 이후 회차를 취소하고 새로 생성한다.
+ * 생성과 같은 방식으로 겹치는 회차는 건너뛰거나(skipConflicts) 전체를 거부한다.
+ */
+export async function replaceSeriesFollowing(input: {
+  reservationId: number;
+  lab?: string;
+  participants?: string | null;
+  occurrences: Occurrence[];
+  skipConflicts: boolean;
+}): Promise<{ created: Reservation[]; skipped: SeriesConflict[]; removed: number }> {
+  const base = await getReservation(input.reservationId);
+  if (!base || base.status !== "confirmed") {
+    throw new ValidationError("예약을 찾을 수 없습니다.", 404);
+  }
+  if (!base.series_id) throw new ValidationError("반복 예약이 아닙니다.");
+
+  for (const occurrence of input.occurrences) {
+    validateTimes(occurrence.startsAt, occurrence.endsAt);
+  }
+
+  const seriesId = base.series_id;
+  const lab = input.lab ?? base.lab;
+  const participants = input.participants === undefined ? base.participants : input.participants;
+
+  const outcome = await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${base.room_id})`;
+
+    // 기존 이후 회차를 먼저 비운다. 취소된 행은 겹침 검사에서 빠지므로
+    // 새 회차가 옛 회차와 겹치는 것으로 잘못 판정되지 않는다.
+    const removedRows = await tx`
+      UPDATE reservations SET status = 'cancelled', updated_at = now()
+      WHERE series_id = ${seriesId}
+        AND status = 'confirmed'
+        AND starts_at >= ${base.starts_at}
+      RETURNING id
+    `;
+
+    const inserted: number[] = [];
+    const conflicts: SeriesConflict[] = [];
+
+    for (const occurrence of input.occurrences) {
+      const [hit] = await tx<{ lab: string; participants: string | null }[]>`
+        SELECT lab, participants FROM reservations
+        WHERE room_id = ${base.room_id}
+          AND status = 'confirmed'
+          AND starts_at < ${occurrence.endsAt}
+          AND ends_at > ${occurrence.startsAt}
+        LIMIT 1
+      `;
+      if (hit) {
+        conflicts.push({
+          startsAt: occurrence.startsAt.toISOString(),
+          endsAt: occurrence.endsAt.toISOString(),
+          conflictWith: reservationLabel(hit),
+        });
+        continue;
+      }
+
+      const [row] = await tx<{ id: number }[]>`
+        INSERT INTO reservations
+          (room_id, lab, participants, starts_at, ends_at, user_email, user_name, series_id)
+        VALUES (
+          ${base.room_id}, ${lab}, ${participants},
+          ${occurrence.startsAt}, ${occurrence.endsAt},
+          ${base.user_email}, ${base.user_name}, ${seriesId}
+        )
+        RETURNING id
+      `;
+      inserted.push(row.id);
+    }
+
+    if (conflicts.length > 0 && !input.skipConflicts) {
+      throw new ValidationError(`${conflicts.length}개 회차가 기존 예약과 겹칩니다.`, 409, {
+        conflicts,
+        total: input.occurrences.length,
+      });
+    }
+    if (inserted.length === 0) {
+      throw new ValidationError("모든 회차가 기존 예약과 겹쳐 수정할 수 없습니다.", 409, {
+        conflicts,
+        total: input.occurrences.length,
+      });
+    }
+
+    return { ids: inserted, skipped: conflicts, removed: removedRows.length };
+  });
+
+  invalidateReservationCache();
+  const created = (await Promise.all(outcome.ids.map((id) => getReservation(id)))).filter(
+    (row): row is Reservation => Boolean(row),
+  );
+  return { created, skipped: outcome.skipped, removed: outcome.removed };
+}
+
+/** 반복 예약의 기준 회차 이후에서 반복 규칙을 되짚어 낸다 (수정 창 기본값용) */
+export async function inferSeriesRule(reservationId: number): Promise<{
+  intervalWeeks: number;
+  weekdays: number[];
+  until: string;
+  count: number;
+} | null> {
+  const base = await getReservation(reservationId);
+  if (!base?.series_id) return null;
+
+  const rows = await sql<{ starts_at: string }[]>`
+    SELECT starts_at FROM reservations
+    WHERE series_id = ${base.series_id}
+      AND status = 'confirmed'
+      AND starts_at >= ${base.starts_at}
+    ORDER BY starts_at
+  `;
+  if (rows.length === 0) return null;
+
+  const dates = rows.map((row) => new Date(row.starts_at));
+  const weekdays = [...new Set(dates.map((date) => partsInZone(date).weekday))].sort(
+    (a, b) => a - b,
+  );
+
+  // 같은 요일이 다시 나오기까지 몇 주 걸리는지로 주기를 되짚는다
+  let intervalWeeks = 1;
+  const firstWeekday = partsInZone(dates[0]).weekday;
+  const repeat = dates.find(
+    (date, index) => index > 0 && partsInZone(date).weekday === firstWeekday,
+  );
+  if (repeat) {
+    const weeks = Math.round(
+      (dayStart(dateKey(repeat)).getTime() - dayStart(dateKey(dates[0])).getTime()) /
+        (7 * 86_400_000),
+    );
+    if (weeks >= 1 && weeks <= 4) intervalWeeks = weeks;
+  }
+
+  return {
+    intervalWeeks,
+    weekdays,
+    until: dateKey(dates[dates.length - 1]),
+    count: dates.length,
+  };
+}
