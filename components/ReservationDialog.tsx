@@ -11,7 +11,7 @@ import {
   expandOccurrences,
   type RecurrenceRule,
 } from "@/lib/recurrence";
-import { DEFAULT_LAB, LABS } from "@/lib/labs";
+import { LABS, rememberLab, rememberedLab } from "@/lib/labs";
 import type { Reservation, Room } from "@/lib/types";
 
 export type DialogSeed = {
@@ -50,7 +50,8 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
   const [roomId, setRoomId] = useState(seed.roomId);
   const [start, setStart] = useState(toLocalInput(seed.startsAt));
   const [end, setEnd] = useState(toLocalInput(seed.endsAt));
-  const [lab, setLab] = useState<string>(seed.lab ?? DEFAULT_LAB);
+  // 수정할 때는 그 예약의 연구실을, 새로 만들 때는 지난번에 고른 연구실을 기본값으로
+  const [lab, setLab] = useState<string>(() => seed.lab ?? rememberedLab());
   const [participants, setParticipants] = useState(seed.participants ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -137,6 +138,7 @@ export default function ReservationDialog({ seed, rooms, onClose, onSaved }: Pro
         return;
       }
 
+      rememberLab(lab);
       onSaved(data.reservation as Reservation, {
         created: Number(data.created ?? 1),
         skipped: Array.isArray(data.skipped) ? data.skipped.length : 0,
