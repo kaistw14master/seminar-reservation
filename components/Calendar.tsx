@@ -146,6 +146,12 @@ export default function Calendar({
   const monthDragRef = useRef<MonthDrag | null>(null);
   // 끌기가 끝난 직후에 이어지는 click 은 상세 창을 열지 않는다
   const suppressClickRef = useRef(false);
+  /**
+   * 예약을 바꾼 뒤 잠시 동안은 서버 캐시를 건너뛴다.
+   * 캐시는 서버 인스턴스마다 따로 있어 변경을 처리한 인스턴스만 캐시를 비우는데,
+   * 이 시간 안에 다른 주/달로 이동하면 다른 인스턴스의 옛 목록을 받을 수 있다.
+   */
+  const freshUntilRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(
@@ -184,7 +190,7 @@ export default function Calendar({
       try {
         const response = await fetch(
           `/api/reservations?from=${from.toISOString()}&to=${to.toISOString()}&roomId=${roomId}` +
-            (options.fresh ? "&fresh=1" : ""),
+            (options.fresh || Date.now() < freshUntilRef.current ? "&fresh=1" : ""),
           { cache: "no-store" },
         );
         const data = await response.json();
@@ -405,6 +411,7 @@ export default function Calendar({
       } catch {
         setNotice("네트워크 오류로 옮기지 못했습니다.");
       }
+      freshUntilRef.current = Date.now() + 30_000;
       void loadRef.current({ silent: true, fresh: true });
     },
     [],
@@ -909,6 +916,7 @@ export default function Calendar({
                   ? `반복 예약 ${summary.updated}회를 수정했습니다.`
                   : null,
             );
+            freshUntilRef.current = Date.now() + 30_000;
             if (saved.room_id !== roomId) setRoomId(saved.room_id);
             else void load({ fresh: true });
           }}
@@ -950,6 +958,7 @@ export default function Calendar({
                 return true;
               }),
             );
+            freshUntilRef.current = Date.now() + 30_000;
             void load({ silent: true, fresh: true });
           }}
         />
