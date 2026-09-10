@@ -593,9 +593,24 @@ export default function Calendar({
             });
             setDetail(null);
           }}
-          onCancelled={() => {
+          onCancelled={(id, scope) => {
+            const target = detail;
             setDetail(null);
-            void load();
+            // 서버 응답을 기다리지 않고 먼저 화면에서 지워 바로 사라지게 한다
+            setReservations((current) =>
+              current.filter((item) => {
+                if (item.id === id) return false;
+                if (
+                  scope === "following" &&
+                  target?.series_id &&
+                  item.series_id === target.series_id
+                ) {
+                  return new Date(item.starts_at) < new Date(target.starts_at);
+                }
+                return true;
+              }),
+            );
+            void load({ silent: true, fresh: true });
           }}
         />
       ) : null}

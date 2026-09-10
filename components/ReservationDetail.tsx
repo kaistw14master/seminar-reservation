@@ -12,7 +12,7 @@ type Props = {
   canManage: boolean;
   onClose: () => void;
   onEdit: () => void;
-  onCancelled: (id: number) => void;
+  onCancelled: (id: number, scope: "single" | "following") => void;
 };
 
 export default function ReservationDetail({
@@ -47,7 +47,7 @@ export default function ReservationDetail({
         setError(data.error ?? "예약 취소에 실패했습니다.");
         return;
       }
-      onCancelled(reservation.id);
+      onCancelled(reservation.id, scope);
     } catch {
       setError("네트워크 오류가 발생했습니다.");
     } finally {
