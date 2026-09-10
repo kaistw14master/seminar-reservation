@@ -905,7 +905,8 @@ export default function Calendar({
               }}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
             >
-              <strong className="font-bold">이 회차만</strong> 옮기기
+              <strong className="font-bold text-emerald-600 dark:text-emerald-400">이 회차만</strong>{" "}
+              옮기기
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 다른 회차는 지금 자리에 그대로 있습니다.
               </span>
@@ -919,7 +920,10 @@ export default function Calendar({
               }}
               className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
             >
-              <strong className="font-bold">이 회차 이후 전체</strong> 옮기기
+              <strong className="font-bold text-violet-600 dark:text-violet-400">
+                이 회차 이후 전체
+              </strong>{" "}
+              옮기기
               <span className="mt-0.5 block text-xs font-normal text-muted">
                 옮긴 만큼 이후 회차도 같이 움직입니다.
               </span>
