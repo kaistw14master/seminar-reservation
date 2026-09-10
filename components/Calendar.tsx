@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Modal from "./Modal";
 import MonthGrid from "./MonthGrid";
 import ReservationDetail from "./ReservationDetail";
 import ReservationDialog, { type DialogSeed } from "./ReservationDialog";
@@ -12,6 +13,7 @@ import {
   dateKeyOfDayStart,
   dayStart,
   formatMonth,
+  formatRange,
   minutesBetween,
   monthGridKeys,
   monthKeyOf,
@@ -127,6 +129,12 @@ export default function Calendar({
   const [notice, setNotice] = useState<string | null>(null);
   const [blockDrag, setBlockDrag] = useState<BlockDrag | null>(null);
   const [monthDrag, setMonthDrag] = useState<MonthDrag | null>(null);
+  // 반복 예약을 끌었을 때 적용 범위를 물어보기 위한 상태
+  const [pendingMove, setPendingMove] = useState<{
+    id: number;
+    startsAt: Date;
+    endsAt: Date;
+  } | null>(null);
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const loadedAtRef = useRef(Date.now());
   const reservationsRef = useRef(reservations);
@@ -372,42 +380,67 @@ export default function Calendar({
     setDetail(reservation);
   }
 
-  /** 끌기를 마치고 서버에 반영 */
-  const commitBlockDrag = useCallback(async (drag: BlockDrag) => {
-    const startsAt = slotTime(drag.dayKey, drag.from);
-    const endsAt = slotTime(drag.dayKey, drag.to);
-    if (startsAt <= new Date()) {
-      setNotice("이미 지난 시간으로는 옮길 수 없습니다.");
-      return;
-    }
-
-    // 먼저 화면에 반영하고, 실패하면 다시 불러와 되돌린다
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === drag.id
-          ? { ...item, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }
-          : item,
-      ),
-    );
-
-    try {
-      const response = await fetch(`/api/reservations/${drag.id}?scope=single`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString(),
-        }),
-      });
-      if (!response.ok) {
+  /** 옮긴 결과를 서버에 반영한다 */
+  const patchTimes = useCallback(
+    async (id: number, startsAt: Date, endsAt: Date, scope: "single" | "following") => {
+      try {
+        const response = await fetch(`/api/reservations/${id}?scope=${scope}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
+          }),
+        });
         const data = await response.json().catch(() => ({}));
-        setNotice(data.error ?? "예약을 옮기지 못했습니다.");
+        if (!response.ok) {
+          setNotice(
+            Array.isArray(data.conflicts) && data.conflicts.length > 0
+              ? `${data.conflicts.length}개 회차가 다른 예약과 겹쳐 옮기지 못했습니다. 수정 창에서 조정해 주세요.`
+              : (data.error ?? "예약을 옮기지 못했습니다."),
+          );
+        } else if (scope === "following" && Number(data.updated) > 1) {
+          setNotice(`반복 예약 ${data.updated}회를 함께 옮겼습니다.`);
+        }
+      } catch {
+        setNotice("네트워크 오류로 옮기지 못했습니다.");
       }
-    } catch {
-      setNotice("네트워크 오류로 옮기지 못했습니다.");
-    }
-    void loadRef.current({ silent: true, fresh: true });
-  }, []);
+      void loadRef.current({ silent: true, fresh: true });
+    },
+    [],
+  );
+
+  /** 화면에 먼저 반영하고, 반복 예약이면 적용 범위를 물어본다 */
+  const finishMove = useCallback(
+    (id: number, startsAt: Date, endsAt: Date) => {
+      setReservations((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }
+            : item,
+        ),
+      );
+      const moved = reservationsRef.current.find((item) => item.id === id);
+      if (moved?.series_id) setPendingMove({ id, startsAt, endsAt });
+      else void patchTimes(id, startsAt, endsAt, "single");
+    },
+    [patchTimes],
+  );
+
+  /** 주간 그리드에서 끌기를 마쳤을 때 */
+  const commitBlockDrag = useCallback(
+    (drag: BlockDrag) => {
+      const startsAt = slotTime(drag.dayKey, drag.from);
+      const endsAt = slotTime(drag.dayKey, drag.to);
+      if (startsAt <= new Date()) {
+        setNotice("이미 지난 시간으로는 옮길 수 없습니다.");
+        void loadRef.current({ silent: true, fresh: true });
+        return;
+      }
+      finishMove(drag.id, startsAt, endsAt);
+    },
+    [finishMove],
+  );
 
   useEffect(() => {
     function onMove(event: PointerEvent) {
@@ -460,45 +493,24 @@ export default function Calendar({
   }, [commitBlockDrag]);
 
   /** 월간 보기: 시각은 그대로 두고 날짜만 옮긴다 */
-  const commitMonthDrag = useCallback(async (drag: MonthDrag) => {
-    const moving = reservationsRef.current.find((item) => item.id === drag.id);
-    if (!moving) return;
+  const commitMonthDrag = useCallback(
+    (drag: MonthDrag) => {
+      const moving = reservationsRef.current.find((item) => item.id === drag.id);
+      if (!moving) return;
 
-    const shift =
-      (dayStart(drag.dayKey).getTime() - dayStart(drag.originDay).getTime()) / 60_000;
-    const startsAt = addMinutes(new Date(moving.starts_at), shift);
-    const endsAt = addMinutes(new Date(moving.ends_at), shift);
-    if (startsAt <= new Date()) {
-      setNotice("이미 지난 날짜로는 옮길 수 없습니다.");
-      return;
-    }
-
-    setReservations((current) =>
-      current.map((item) =>
-        item.id === drag.id
-          ? { ...item, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }
-          : item,
-      ),
-    );
-
-    try {
-      const response = await fetch(`/api/reservations/${drag.id}?scope=single`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString(),
-        }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        setNotice(data.error ?? "예약을 옮기지 못했습니다.");
+      const shift =
+        (dayStart(drag.dayKey).getTime() - dayStart(drag.originDay).getTime()) / 60_000;
+      const startsAt = addMinutes(new Date(moving.starts_at), shift);
+      const endsAt = addMinutes(new Date(moving.ends_at), shift);
+      if (startsAt <= new Date()) {
+        setNotice("이미 지난 날짜로는 옮길 수 없습니다.");
+        void loadRef.current({ silent: true, fresh: true });
+        return;
       }
-    } catch {
-      setNotice("네트워크 오류로 옮기지 못했습니다.");
-    }
-    void loadRef.current({ silent: true, fresh: true });
-  }, []);
+      finishMove(drag.id, startsAt, endsAt);
+    },
+    [finishMove],
+  );
 
   useEffect(() => {
     function onMove(event: PointerEvent) {
@@ -825,6 +837,61 @@ export default function Calendar({
           ? "빈 시간대를 클릭하거나 드래그하면 예약 창이 열립니다. 내 예약은 끌어서 옮기고, 위아래 모서리를 끌어 길이를 바꿀 수 있습니다."
           : "날짜 칸의 빈 곳을 누르면 그날 예약을 만들고, 날짜 숫자를 누르면 그 주의 주간 보기로 이동합니다."}
       </p>
+
+      {pendingMove ? (
+        <Modal
+          title="이후 회차도 함께 옮길까요?"
+          onClose={() => {
+            setPendingMove(null);
+            void load({ silent: true, fresh: true }); // 되돌린다
+          }}
+        >
+          <p className="text-sm">
+            반복 예약의 한 회차를 옮겼습니다.
+            <span className="mt-1 block font-medium text-ink">
+              {formatRange(pendingMove.startsAt.toISOString(), pendingMove.endsAt.toISOString())}
+            </span>
+          </p>
+
+          <div className="mt-5 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                const move = pendingMove;
+                setPendingMove(null);
+                void patchTimes(move.id, move.startsAt, move.endsAt, "single");
+              }}
+              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-left text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              이 회차만 옮기기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const move = pendingMove;
+                setPendingMove(null);
+                void patchTimes(move.id, move.startsAt, move.endsAt, "following");
+              }}
+              className="w-full rounded-lg border border-line px-4 py-2.5 text-left text-sm font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              이 회차 이후 전체 옮기기
+              <span className="mt-0.5 block text-xs font-normal text-muted">
+                옮긴 만큼 이후 회차도 같이 움직입니다.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPendingMove(null);
+                void load({ silent: true, fresh: true });
+              }}
+              className="w-full rounded-lg px-4 py-2 text-sm text-muted transition hover:bg-black/5 dark:hover:bg-white/10"
+            >
+              되돌리기
+            </button>
+          </div>
+        </Modal>
+      ) : null}
 
       {dialogSeed ? (
         <ReservationDialog
